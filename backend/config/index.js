@@ -24,6 +24,10 @@ const config = {
   mongoUrl: readEnv('MONGODB_URL', 'mongodb://127.0.0.1:27017/flowboard'),
   frontendUrl: readEnv('FRONTEND_URL', 'http://localhost:5173'),
   redisUrl: readEnv('REDIS_URL'),
+  // Render's free tier sleeps after ~15 idle minutes. Production pings its own
+  // /health endpoint to stay warm; development and tests never do.
+  keepAlive: isProduction && readEnv('SELF_PING', 'on').toLowerCase() !== 'off',
+  keepAliveIntervalMs: Number(readEnv('SELF_PING_INTERVAL_MS', '600000')),
   jwtSecret: readEnv('JWT_SECRET', isProduction ? '' : 'flowboard-dev-only-secret-not-for-prod'),
   jwtTtlDays: Number(readEnv('JWT_TTL_DAYS', '7')),
   bodyLimitBytes: 64 * 1024,

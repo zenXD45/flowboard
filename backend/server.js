@@ -6,6 +6,7 @@ import { createClient } from 'redis';
 import config from './config/index.js';
 import { createApp } from './app.js';
 import initSockets from './sockets/index.js';
+import { startKeepAlive } from './utils/keepalive.js';
 
 /**
  * Without Redis every Socket.io instance keeps its own room registry, so a
@@ -46,6 +47,10 @@ async function main() {
   const redisClients = await attachAdapter(io);
   initSockets(io);
 
+  const keepAlive = config.keepAlive
+    ? startKeepAlive({ port: config.port, intervalMs: config.keepAliveIntervalMs })
+    : null;
+
   server.listen(config.port, () => {
     console.log(`[api] listening on http://localhost:${config.port}`);
   });
@@ -55,6 +60,7 @@ async function main() {
     if (closing) return;
     closing = true;
     console.log(`[api] ${signal} — shutting down`);
+    keepAlive?.stop();
     io.close();
     server.close(async () => {
       await Promise.allSettled([redisClients?.pub?.quit(), redisClients?.sub?.quit()]);
