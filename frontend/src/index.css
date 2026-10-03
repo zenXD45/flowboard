@@ -1,9 +1,33 @@
 /* ==========================================================================
    FlowBoard — design system
    A dense, calm operator surface. Dark-first, one restrained accent, a locked
-   four-step shape scale, three-step elevation, and a type ramp whose contrast
-   is verified against every surface it can land on.
+   four-step shape scale, three-step elevation, and a type ramp of seven sizes
+   over three weights — every one of them declared, and every one of them a
+   value the loaded face can actually draw.
    ========================================================================== */
+
+/* Hanken Grotesk, self-hosted: a warm humanist grotesque with a genuine
+   400–700 variable axis, so a weight written in this file is a weight the
+   browser renders rather than one it rounds to whatever the OS happens to
+   carry. The old stack was `ui-sans-serif, system-ui, …` and loaded zero
+   faces — document.fonts.size was 0, and the seven weights in use (400 500
+   540 560 600 620 640) measured as exactly two distinct widths. The hierarchy
+   the code described never reached the screen, and it was a different
+   typeface on every platform.
+   Not Geist. Geist was the first face chosen here and this project's own
+   detector rejected it: Inter, Roboto, Geist, Plus Jakarta Sans and Space
+   Grotesk are the handful every AI-built interface converges on, so reaching
+   for one is the surest way to keep looking assembled rather than designed.
+   Hanken's humanist skeleton also suits the palette better than a cool tech
+   grotesque would — these surfaces are warm near-black, not blue-black.
+   Latin subset, 34 KB, `swap` plus a preload so text is never invisible. */
+@font-face {
+  font-family: 'Hanken Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/hanken-latin.woff2') format('woff2');
+}
 
 /* ------------------------------------------------------------------ tokens */
 
@@ -13,7 +37,6 @@
   --surface-1: #171615; /* cards, panels, topbar */
   --surface-2: #201e1c; /* inputs, hover fills */
   --surface-3: #2a2725; /* pressed / nested chips */
-  --surface-col: #141312; /* a list on the board canvas */
   --scrim: rgb(0 0 0 / 58%);
 
   /* lines */
@@ -21,7 +44,7 @@
   --line-soft: #24211e;
   --line-strong: #4a443e;
 
-  /* ink — every value clears 4.5:1 on surface-1/2/3 and on surface-col */
+  /* ink — every value clears 4.5:1 on surface-1/2/3 */
   --ink: #f4f0ec; /* 13.1:1 worst case */
   --ink-2: #b8b0a8; /*  6.9:1 */
   --ink-3: #978f88; /*  4.7:1 — tertiary text, never interactive labels */
@@ -73,7 +96,28 @@
   --t-base: 180ms;
   --t-slow: 240ms;
 
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, 'Helvetica Neue', sans-serif;
+
+  /* Type ramp — seven sizes. Steps are 1px at the dense end where labels sit
+     a hair apart, then open to 2–4px once we are above body size, because a
+     heading needs a visible gap to be a heading. Every font-size below
+     resolves to one of these; no other value appears. */
+  --t-2xs: 11px; /* micro: card labels, badges, counters */
+  --t-xs: 12px; /* metadata: timestamps, counts, hints */
+  --t-sm: 13px; /* labels and compact controls */
+  --t-md: 14px; /* body */
+  --t-lg: 16px; /* emphasis, chrome-bar titles, sub-headings */
+  --t-xl: 19px; /* section headings (h2) */
+  --t-2xl: 23px; /* page titles (h1) and the wordmark */
+
+  /* Weights — four steps, all inside the face's 400–700 axis: 400 reads,
+     500 labels, 600 heads, 700 reserved and currently unused. Written as
+     literals rather than tokens because unlike a size, `600` already says
+     what it is; the policy that matters is that nothing off-axis appears. */
+  --lh-tight: 1.2;
+  --lh-snug: 1.38;
+  --lh-body: 1.5;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
@@ -84,15 +128,15 @@
    borders, which are visible against near-black; a light theme has to get
    structure from tone instead. The values before this were flat: --surface-2
    and --surface-1 were both #ffffff, so every hover fill, input and segmented
-   track measured exactly 1.00:1 against the card or topbar it sat on, and
-   --surface-col against --bg was 1.03:1, so columns had no fill separation at
-   all. Only dark mode looked like it had states. */
+   track measured exactly 1.00:1 against the card or topbar it sat on. Only
+   dark mode looked like it had states. Columns used to need a rung of their
+   own here; they are lanes now and take no fill, so the ladder stops at the
+   card. */
 :root[data-theme="light"] {
   --bg: #eeebe5; /* the canvas, deliberately recessed */
   --surface-1: #ffffff; /* cards, panels, topbar */
   --surface-2: #f7f4ef; /* inputs, hover fills */
   --surface-3: #ece7df; /* pressed / nested chips */
-  --surface-col: #fbfaf8; /* a list on the board canvas */
   --scrim: rgb(40 30 22 / 42%);
 
   --line: #dcd5cb;
@@ -146,7 +190,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--t-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -154,11 +198,31 @@ body {
 
 button, input, textarea, select { font: inherit; color: inherit; }
 
+/* Headings, sized explicitly. Left to the UA they take the browser's scale —
+   h1 at 2em, h2 at 1.5em — so the same element rendered at 21px inside the
+   activity panel and 15px inside settings, and neither was a choice. Three
+   sizes, each a clear step from the one below: page, section, sub-section.
+   Tracking tightens as size grows, which is what makes a ramp feel drawn
+   rather than stepped. */
 h1, h2, h3 {
   margin: 0;
   font-weight: 600;
-  letter-spacing: -0.012em;
   text-wrap: balance;
+}
+h1 {
+  font-size: var(--t-2xl);
+  letter-spacing: -0.02em;
+  line-height: var(--lh-tight);
+}
+h2 {
+  font-size: var(--t-xl);
+  letter-spacing: -0.015em;
+  line-height: var(--lh-tight);
+}
+h3 {
+  font-size: var(--t-lg);
+  letter-spacing: -0.01em;
+  line-height: var(--lh-snug);
 }
 
 p { margin: 0; }
@@ -207,7 +271,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* ------------------------------------------------------------- boot state */
 
-.boot, .board-shell--center {
+/* The app-level boot ring. The board's centred shell used to share this rule;
+   it now lives beside .board-shell, because a modifier must come after the base
+   rule it modifies — see the note there. */
+.boot {
   display: grid;
   place-content: center;
   justify-items: center;
@@ -231,18 +298,31 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
    from the same radius and column width the board uses. The shimmer is a
    transform on a pseudo-element rather than a background-position animation,
    so it stays on the compositor and does not repaint the column behind it. */
-.skel { display: flex; gap: 12px; width: 100%; padding: 0 20px; }
+.skel {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0 20px;
+  overflow-x: auto;
+}
+/* Centring only once the columns fit. Centred overflow is unreachable: the
+   first column would sit past the left edge with no way to scroll back to it.
+   Three 276px columns plus gaps and gutters need 892px, so the switch point is
+   set above that, not at the phone breakpoint. */
+@media (max-width: 920px) {
+  .skel { justify-content: flex-start; }
+}
 
+/* Lane-shaped: no frame of its own, a full-width header bar carrying the rule
+   that the real column's header carries, then card placeholders. The col gap of
+   9px is the same gap the real header rule leaves above the first card. */
 .skel__col {
   display: flex;
   flex-direction: column;
   gap: 9px;
   width: 276px;
   flex-shrink: 0;
-  padding: 11px 9px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-3);
-  background: var(--surface-col);
 }
 
 .skel__bar,
@@ -258,7 +338,20 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   background-size: 220% 100%;
   animation: skel-sweep 1.4s var(--ease) infinite;
 }
-.skel__bar { height: 13px; margin-bottom: 4px; }
+/* The rule the real column header draws, and the header's own height, so the
+   first card lands where it will land once data arrives. box-sizing is
+   border-box everywhere, so the 13px of shimmer is the content box and the
+   rest is padding plus the 1px rule: 45 = 13 content + 31 pad + 1 rule.
+   45 is measured off `.column__head`, not derived — the header is as tall as
+   its tallest child (title block and menu button), and a derived 44 was one
+   pixel short of it at every viewport. `content-box` keeps the gradient off
+   the padding so the bar still reads as 13px rather than as a 44px block. */
+.skel__bar {
+  height: 45px;
+  padding-bottom: 31px;
+  border-bottom: 1px solid var(--line-soft);
+  background-clip: content-box;
+}
 .skel__card { height: 62px; }
 .skel__card--short { height: 44px; }
 
@@ -267,7 +360,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   to { background-position: -120% 0; }
 }
 
-.skel__note { margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+.skel__note { margin-top: 18px; color: var(--ink-3); font-size: var(--t-sm); }
 
 /* The skeleton mirrors the board's own mobile rule — same column width, same
    horizontal overflow — so the swap from skeleton to real columns does not
@@ -290,7 +383,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   border-radius: var(--r-2);
   background: var(--accent);
   color: var(--accent-ink);
-  font-weight: 560;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
@@ -387,7 +480,7 @@ input:focus, textarea:focus, select:focus {
 input:disabled, textarea:disabled { opacity: 0.7; cursor: not-allowed; }
 textarea { resize: vertical; }
 
-label { display: block; color: var(--ink-2); font-size: 13px; }
+label { display: block; color: var(--ink-2); font-size: var(--t-sm); }
 label input, label textarea { margin-top: 5px; }
 
 /* ------------------------------------------------------------ small pieces */
@@ -398,8 +491,8 @@ label input, label textarea { margin-top: 5px; }
   gap: 5px;
   padding: 3px 9px;
   border-radius: var(--r-pill);
-  font-size: 12px;
-  font-weight: 560;
+  font-size: var(--t-xs);
+  font-weight: 600;
   white-space: nowrap;
 }
 .pill--warn { background: color-mix(in srgb, var(--warn-fill) 18%, transparent); color: var(--warn); }
@@ -410,7 +503,7 @@ label input, label textarea { margin-top: 5px; }
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: var(--t-xs);
   text-transform: lowercase;
 }
 
@@ -464,8 +557,10 @@ label input, label textarea { margin-top: 5px; }
 .auth__form .btn.btn--busy { animation: breathe 1.1s var(--ease) 0s infinite; }
 .auth__swap { animation-delay: 244ms; }
 
-.auth__brand { font-size: 25px; letter-spacing: -0.025em; }
-.auth__tag { margin: 6px 0 22px; color: var(--ink-3); font-size: 14px; }
+/* The wordmark rides h1's size and only tightens its tracking — a display
+   line wants more compression than a page title, but it is not a second size. */
+.auth__brand { letter-spacing: -0.025em; }
+.auth__tag { margin: 6px 0 22px; color: var(--ink-3); font-size: var(--t-md); }
 
 .auth__form { display: grid; gap: 13px; }
 
@@ -475,10 +570,10 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-2);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--t-sm);
 }
 
-.auth__swap { margin: 20px 0 0; color: var(--ink-3); font-size: 13px; text-align: center; }
+.auth__swap { margin: 20px 0 0; color: var(--ink-3); font-size: var(--t-sm); text-align: center; }
 .auth__swap button {
   min-height: 24px;
   padding: 2px 4px;
@@ -486,7 +581,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-1);
   background: none;
   color: var(--accent-text);
-  font-weight: 560;
+  font-weight: 600;
   cursor: pointer;
 }
 .auth__swap button:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -519,8 +614,8 @@ label input, label textarea { margin-top: 5px; }
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 14px;
-  font-weight: 540;
+  font-size: var(--t-md);
+  font-weight: 500;
   cursor: pointer;
   /* transform rides along with the fill change: a button that changes colour on
      press but never moves doesn't register as pressed. */
@@ -552,7 +647,7 @@ label input, label textarea { margin-top: 5px; }
   gap: 12px;
   margin: 0 0 18px;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--t-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   animation: settle var(--t-base) var(--ease);
@@ -571,20 +666,19 @@ label input, label textarea { margin-top: 5px; }
   gap: 16px;
   margin-bottom: 28px;
 }
-.dash__brand { font-size: 23px; letter-spacing: -0.025em; }
+.dash__brand { letter-spacing: -0.025em; }
 
 .dash__new { display: flex; gap: 9px; max-width: 520px; margin-bottom: 28px; }
 .dash__new input { flex: 1; }
 
+/* Deliberately no entrance. The board's cascade is the app's one authored
+   moment — the only place it performs. A dashboard that also animated on arrival
+   would make that gesture the default instead of the signature, and an operator
+   surface should be present the instant it is needed. */
 .dash__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
   gap: 12px;
-  /* One beat for the grid as a whole, not a card-by-card stagger. The board
-     already owns the sequenced entrance; repeating it here would make the same
-     gesture the app's default instead of its signature. */
-  animation: settle var(--t-slow) var(--ease) backwards;
-  animation-delay: 40ms;
 }
 
 .boardcard {
@@ -647,6 +741,22 @@ label input, label textarea { margin-top: 5px; }
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Centred loading and fatal states. This must sit after .board-shell: both are
+   single-class selectors, so source order breaks the tie, and .board-shell's
+   `display: flex` was beating the `display: grid` this rule used to declare —
+   which silently disabled place-content/justify-items and pinned the skeleton
+   and the error panel to the top-left instead of the middle. Flex rather than
+   grid, so that .skel keeping width:100% resolves against the viewport and
+   cannot push a track wider than a phone. */
+.board-shell--center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--ink-3);
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -659,7 +769,7 @@ label input, label textarea { margin-top: 5px; }
 .topbar__left { min-width: 0; }
 .topbar__title {
   overflow: hidden;
-  font-size: 16px;
+  font-size: var(--t-lg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -667,7 +777,7 @@ label input, label textarea { margin-top: 5px; }
   overflow: hidden;
   margin: 2px 0 0;
   color: var(--ink-3);
-  font-size: 12.5px;
+  font-size: var(--t-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -683,13 +793,13 @@ label input, label textarea { margin-top: 5px; }
   box-shadow: 0 0 0 3px var(--accent-wash);
 }
 .presence__dot--alone { background: var(--ink-3); box-shadow: none; }
-.presence__label { margin-left: 7px; color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.presence__label { margin-left: 7px; color: var(--ink-3); font-size: var(--t-xs); white-space: nowrap; }
 
 .avatar {
   display: inline-grid;
   place-content: center;
   border-radius: 50%;
-  font-weight: 640;
+  font-weight: 600;
   letter-spacing: 0.02em;
   overflow: hidden;
   flex-shrink: 0;
@@ -734,6 +844,11 @@ label input, label textarea { margin-top: 5px; }
      behaviour and the reason the cards only need `manipulation`. */
 }
 
+/* A lane, not a card. The column used to be a bordered, rounded, filled box
+   holding bordered, rounded, filled boxes — the same object drawn twice at two
+   scales, which is the loudest "assembled rather than designed" signal on the
+   board. Structure now comes from the header rule below and from the cards
+   themselves; the lane is the space they share, not a frame around them. */
 .column {
   display: flex;
   flex-direction: column;
@@ -745,16 +860,16 @@ label input, label textarea { margin-top: 5px; }
   max-height: 100%;
   flex-shrink: 0;
   scroll-snap-align: start;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-3);
-  background: var(--surface-col);
 }
 
 .column__head {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 8px 8px 11px;
+  /* 16px so the header text lands on the same axis as the card text below it:
+     body padding 9 + card border 1 + card padding 11 = 21, and the title sits
+     5px inside this padding. Text aligns to text, not to edges. */
+  padding: 8px 8px 8px 16px;
   border-bottom: 1px solid var(--line-soft);
 }
 .column__title {
@@ -764,8 +879,8 @@ label input, label textarea { margin-top: 5px; }
   border: none;
   border-radius: var(--r-1);
   background: none;
-  font-size: 13.5px;
-  font-weight: 620;
+  font-size: var(--t-md);
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
@@ -775,10 +890,10 @@ label input, label textarea { margin-top: 5px; }
 .column__count {
   padding: 0 3px;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-variant-numeric: tabular-nums;
 }
-.column__rename { font-size: 13.5px; font-weight: 620; }
+.column__rename { font-size: var(--t-md); font-weight: 600; }
 
 .column__body {
   display: flex;
@@ -816,7 +931,7 @@ label input, label textarea { margin-top: 5px; }
 }
 .column__body--over { background: var(--accent-wash); outline-color: var(--accent-text); }
 
-.column__empty { margin: 8px 2px; color: var(--ink-3); font-size: 12.5px; }
+.column__empty { margin: 8px 2px; color: var(--ink-3); font-size: var(--t-xs); }
 
 /* An empty column is the state every new board starts in, so it doubles as the
    invitation: it names the drop target and offers the control that fills it. */
@@ -829,7 +944,7 @@ label input, label textarea { margin-top: 5px; }
   border: 1px dashed var(--line);
   border-radius: var(--r-2);
 }
-.column__blank-text { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+.column__blank-text { margin: 0; color: var(--ink-3); font-size: var(--t-xs); }
 .column__blank-cta {
   display: inline-flex;
   align-items: center;
@@ -840,8 +955,8 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-1);
   background: var(--surface-1);
   color: var(--ink-2);
-  font-size: 12.5px;
-  font-weight: 540;
+  font-size: var(--t-xs);
+  font-weight: 500;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
     transform var(--t-fast) var(--ease);
@@ -851,7 +966,7 @@ label input, label textarea { margin-top: 5px; }
 
 /* The armed state of a destructive action, inline in the column header. */
 .column__confirm { display: inline-flex; align-items: center; gap: 4px; }
-.btn--tiny { min-height: 28px; padding: 3px 9px; font-size: 12.5px; }
+.btn--tiny { min-height: 28px; padding: 3px 9px; font-size: var(--t-xs); }
 
 .column__add {
   display: flex;
@@ -863,7 +978,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-2);
   background: transparent;
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: var(--t-sm);
   text-align: left;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
@@ -872,7 +987,7 @@ label input, label textarea { margin-top: 5px; }
 .column__add:hover { background: var(--surface-2); color: var(--ink); }
 .column__add:active { transform: scale(0.985); }
 
-.composer { font-size: 13.5px; }
+.composer { font-size: var(--t-md); }
 
 .addlist {
   display: flex;
@@ -961,18 +1076,18 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-1);
   background: var(--lab-bg, var(--labbg-misc));
   color: var(--lab, var(--lab-misc));
-  font-size: 10.5px;
-  font-weight: 620;
+  font-size: var(--t-2xs);
+  font-weight: 600;
   letter-spacing: 0.03em;
 }
 
-.card__title { font-size: 13.5px; line-height: 1.38; overflow-wrap: anywhere; }
+.card__title { font-size: var(--t-md); line-height: 1.38; overflow-wrap: anywhere; }
 .card__excerpt {
   display: -webkit-box;
   margin: 5px 0 0;
   overflow: hidden;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--t-xs);
   line-height: 1.4;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -991,12 +1106,12 @@ label input, label textarea { margin-top: 5px; }
   align-items: center;
   gap: 4px;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: var(--t-xs);
   font-variant-numeric: tabular-nums;
 }
 .due--soon { color: var(--warn); }
-.due--today { color: var(--warn); font-weight: 620; }
-.due--late { color: var(--danger); font-weight: 620; }
+.due--today { color: var(--warn); font-weight: 600; }
+.due--late { color: var(--danger); font-weight: 600; }
 
 /* ------------------------------------------------------------------ panels */
 
@@ -1047,8 +1162,8 @@ label input, label textarea { margin-top: 5px; }
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.sheet__head h2 { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 15px; }
-.sheet__title { flex: 1; min-width: 0; border: none; background: none; padding: 3px 4px; font-size: 16px; font-weight: 620; }
+.sheet__head h2 { display: flex; align-items: center; gap: 8px; flex: 1; font-size: var(--t-lg); }
+.sheet__title { flex: 1; min-width: 0; border: none; background: none; padding: 3px 4px; font-size: var(--t-lg); font-weight: 600; }
 
 .sheet__body {
   display: grid;
@@ -1061,22 +1176,22 @@ label input, label textarea { margin-top: 5px; }
 .sheet__desc { min-height: 88px; }
 
 .meta { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 9px 11px; margin: 0; }
-.meta dt { color: var(--ink-3); font-size: 12.5px; }
+.meta dt { color: var(--ink-3); font-size: var(--t-xs); }
 .meta dd { margin: 0; }
 .meta__labels { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.meta__addlabel { width: 96px; min-height: 28px; font-size: 12px; }
+.meta__addlabel { width: 96px; min-height: 28px; font-size: var(--t-xs); }
 
-.comments h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; font-size: 13.5px; color: var(--ink-2); }
+.comments h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; font-size: var(--t-md); color: var(--ink-2); }
 
 .comment { display: flex; gap: 9px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
-.comment__meta { color: var(--ink-3); font-size: 12px; }
-.comment__body { margin: 2px 0 0; font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment__meta { color: var(--ink-3); font-size: var(--t-xs); }
+.comment__body { margin: 2px 0 0; font-size: var(--t-md); white-space: pre-wrap; overflow-wrap: anywhere; }
 .comment__composer { display: grid; justify-items: end; gap: 7px; }
 
 .people { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .people li { display: flex; align-items: center; gap: 9px; padding: 6px 0; }
-.people__who { flex: 1; font-size: 13.5px; }
-.people select { width: auto; min-height: 28px; font-size: 12px; }
+.people__who { flex: 1; font-size: var(--t-md); }
+.people select { width: auto; min-height: 28px; font-size: var(--t-xs); }
 
 .invite {
   display: grid;
@@ -1090,8 +1205,8 @@ label input, label textarea { margin-top: 5px; }
 .feed { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .feed li { display: grid; grid-template-columns: 12px 1fr auto; align-items: baseline; gap: 8px; padding: 6px 0; }
 .feed__dot { width: 6px; height: 6px; margin-top: 7px; border-radius: 50%; background: var(--line-strong); }
-.feed p { font-size: 13px; }
-.feed time { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.feed p { font-size: var(--t-sm); }
+.feed time { color: var(--ink-3); font-size: var(--t-xs); white-space: nowrap; }
 
 /* ------------------------------------------------------------------ toasts */
 
@@ -1114,7 +1229,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-3);
   background: var(--surface-1);
   box-shadow: var(--shadow-3);
-  font-size: 13px;
+  font-size: var(--t-sm);
   animation: rise var(--t-base) var(--ease);
 }
 
@@ -1167,7 +1282,7 @@ label input, label textarea { margin-top: 5px; }
   .column__blank-cta { min-height: 44px; }
   .toast__x { width: 44px; height: 44px; }
   .addlist { min-height: 44px; }
-  input, textarea, select { min-height: 44px; font-size: 16px; }
+  input, textarea, select { min-height: 44px; font-size: var(--t-lg); }
   /* 16px is not cosmetic: anything smaller makes iOS Safari zoom the viewport
      on focus, which then leaves the sheet scrolled sideways. */
 }
@@ -1217,7 +1332,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-pill);
   background: var(--surface-2);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--t-sm);
   cursor: pointer;
   transition: background var(--t-fast) var(--ease);
 }
@@ -1266,8 +1381,8 @@ label input, label textarea { margin-top: 5px; }
 }
 
 .avmenu__ident { display: flex; flex-direction: column; min-width: 0; }
-.avmenu__ident strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.avmenu__ident .muted { font-size: 12px; }
+.avmenu__ident strong { font-size: var(--t-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avmenu__ident .muted { font-size: var(--t-xs); }
 
 .avmenu__item {
   display: flex;
@@ -1279,7 +1394,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-1);
   background: transparent;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: var(--t-md);
   text-align: left;
   cursor: pointer;
   transition: background-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
@@ -1304,7 +1419,7 @@ label input, label textarea { margin-top: 5px; }
 }
 
 .settings__top { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.settings__top h1 { margin: 6px 0 0; font-size: 22px; letter-spacing: -0.01em; }
+.settings__top h1 { margin: 6px 0 0; }
 
 .settings__notice {
   margin: 0;
@@ -1312,7 +1427,7 @@ label input, label textarea { margin-top: 5px; }
   border: 1px solid var(--line);
   border-radius: var(--r-2);
   background: var(--surface-2);
-  font-size: 13.5px;
+  font-size: var(--t-md);
   /* Feedback that arrives rather than appears. The element is keyed on the
      notice id, so each save remounts it and the acknowledgement replays. */
   animation: rise var(--t-base) var(--ease);
@@ -1320,8 +1435,8 @@ label input, label textarea { margin-top: 5px; }
 .settings__notice--error { border-color: var(--danger-fill); color: var(--danger); }
 
 .settings__section { display: flex; flex-direction: column; gap: 10px; }
-.settings__sectionhead h2 { margin: 0; font-size: 15px; }
-.settings__sectionhead p { margin: 3px 0 0; font-size: 12.5px; }
+.settings__sectionhead h2 { margin: 0; }
+.settings__sectionhead p { margin: 3px 0 0; font-size: var(--t-xs); }
 
 .settings__card {
   display: flex;
@@ -1336,7 +1451,7 @@ label input, label textarea { margin-top: 5px; }
 .settings__avatar { display: flex; align-items: center; gap: 16px; }
 .settings__avataractions { display: flex; flex-direction: column; gap: 6px; }
 .settings__row { display: flex; gap: 8px; }
-.settings__tiny { font-size: 11.5px; }
+.settings__tiny { font-size: var(--t-xs); }
 
 .settings__swatches { display: flex; gap: 9px; }
 .swatch {
@@ -1388,7 +1503,7 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-1);
   background: transparent;
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: var(--t-sm);
   cursor: pointer;
   transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease),
     box-shadow var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
@@ -1419,8 +1534,8 @@ label input, label textarea { margin-top: 5px; }
   border-bottom: 1px solid var(--line-soft);
 }
 .settings__connection:last-child { border-bottom: 0; }
-.settings__connectionname { display: inline-flex; align-items: center; gap: 9px; font-size: 14px; }
-.settings__dangertext { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.55; }
+.settings__connectionname { display: inline-flex; align-items: center; gap: 9px; font-size: var(--t-md); }
+.settings__dangertext { margin: 0; color: var(--ink-2); font-size: var(--t-sm); line-height: 1.55; }
 
 .pill--ok { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
 

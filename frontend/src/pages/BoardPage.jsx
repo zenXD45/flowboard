@@ -16,18 +16,18 @@ function BoardSkeleton() {
     <div className="board-shell board-shell--center" role="status" aria-label="Opening the board">
       <div className="skel">
         <div className="skel__col">
-          <span className="skel__bar" style={{ width: '58%' }} />
+          <span className="skel__bar" />
           <span className="skel__card" />
           <span className="skel__card" />
           <span className="skel__card skel__card--short" />
         </div>
         <div className="skel__col">
-          <span className="skel__bar" style={{ width: '44%' }} />
+          <span className="skel__bar" />
           <span className="skel__card" />
           <span className="skel__card" />
         </div>
         <div className="skel__col">
-          <span className="skel__bar" style={{ width: '52%' }} />
+          <span className="skel__bar" />
           <span className="skel__card" />
         </div>
       </div>
