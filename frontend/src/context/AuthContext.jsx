@@ -8,9 +8,30 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
+  /**
+   * The OAuth handoff, read once from the fragment on mount.
+   *
+   * It has to be captured synchronously: the fragment is consumed during the
+   * first render pass, and by the time an effect runs the router may already
+   * have reacted to it.
+   */
+  const [handoff] = useState(() => {
+    const hash = window.location.hash.replace(/^#/, '');
+    if (!hash) return null;
+    const params = new URLSearchParams(hash);
+    const code = params.get('code');
+    const authError = params.get('auth');
+    if (!code && !authError) return null;
+    return { code, authError };
+  });
+
   useEffect(() => {
     let cancelled = false;
     async function restore() {
+      // A social sign-in is mid-flight. The handoff effect below owns the ready
+      // gate, so returning here without setting it keeps the boot screen up
+      // instead of flashing the auth card before the user is signed in.
+      if (handoff) return;
       if (!tokenPresent()) {
         setReady(true);
         return;
@@ -48,7 +69,7 @@ export function AuthProvider({ children }) {
       cancelled = true;
       window.removeEventListener('flowboard:unauthorized', onUnauth);
     };
-  }, []);
+  }, [handoff]);
 
   const signup = useCallback(async (fields) => {
     const data = await api.signup(fields);
@@ -69,6 +90,58 @@ export function AuthProvider({ children }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  /**
+   * Finish a social sign-in on return from the provider.
+   *
+   * The server hands back `#code=…` rather than a token, so the JWT is obtained
+   * here over POST and stored exactly the way a password login stores it. The
+   * fragment is stripped immediately: leaving it would let a refresh replay a
+   * spent code — which fails, but bounces the user back to the sign-in screen —
+   * and would keep the code in the address bar and in history.
+   */
+  useEffect(() => {
+    if (!handoff) return;
+
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    if (handoff.authError) {
+      const messages = {
+        cancelled: 'Sign-in was cancelled.',
+        'invalid-state': 'That sign-in link could not be verified. Please try again.',
+        failed: 'Social sign-in did not complete. Please try again.'
+      };
+      window.dispatchEvent(
+        new CustomEvent('flowboard:auth-error', {
+          detail: { message: messages[handoff.authError] || messages.failed }
+        })
+      );
+      setReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    api
+      .exchangeOauthCode(handoff.code)
+      .then((data) => {
+        if (cancelled) return;
+        setToken(data.token);
+        setUser(data.user);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        window.dispatchEvent(
+          new CustomEvent('flowboard:auth-error', { detail: { message: err.message } })
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handoff]);
 
   const value = useMemo(() => ({ user, ready, signup, login, logout }), [user, ready, signup, login, logout]);
 

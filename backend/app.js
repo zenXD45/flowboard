@@ -9,6 +9,7 @@ import { isOriginAllowed, isSelfOrigin } from './utils/origins.js';
 import { requireAuth } from './middleware/auth.js';
 import * as auth from './controllers/auth.controller.js';
 import * as boards from './controllers/boards.controller.js';
+import { authRoutes } from './routes/auth.routes.js';
 
 const staticDir = path.join(config.root, '..', 'frontend', 'dist');
 
@@ -124,6 +125,19 @@ export function createApp(overrides = {}) {
   app.use('/api', api);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+  // Social sign-in lives outside /api/, so the API limiters above do not cover
+  // it. It gets its own: the start endpoint is cheap but generates state that
+  // must stay unguessable, and the callback is the interesting target, so both
+  // are bounded per client rather than left open.
+  const oauthLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: cfg.testRatelimit ? 20 : 60,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: () => cfg.isTest && !cfg.testRatelimit
+  });
+  app.use('/auth/', oauthLimiter, authRoutes());
 
   if (fs.existsSync(staticDir)) {
     app.use(express.static(staticDir, { index: 'index.html', maxAge: '1h' }));

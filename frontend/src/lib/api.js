@@ -64,6 +64,10 @@ export const api = {
   signup: (body) => request('/api/auth/signup', { method: 'POST', body }),
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
   me: () => request('/api/auth/me'),
+  oauthProviders: () => request('/auth/providers'),
+  // Trades the single-use handoff code from the OAuth redirect for a normal
+  // JWT. This is the only place a session token is minted for a social sign-in.
+  exchangeOauthCode: (code) => request('/auth/exchange', { method: 'POST', body: { code } }),
   searchUsers: (q) => request(`/api/users?q=${encodeURIComponent(q)}`),
   boards: () => request('/api/boards'),
   board: (id) => request(`/api/boards/${id}`),

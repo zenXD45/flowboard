@@ -62,6 +62,14 @@ export async function login(req, res) {
     return res.status(401).json({ error: 'Incorrect username or password' });
   }
 
+  // An account created by social sign-in has no password. Comparing against an
+  // empty hash would either throw or silently pass, so the same generic message
+  // is returned and no hash comparison is attempted.
+  if (!user.passwordHash) {
+    await bcrypt.compare(password, `$2b$${BCRYPT_ROUNDS}$abcdefghijklmnopqrstuv0123456789012345678901234567890`);
+    return res.status(401).json({ error: 'Incorrect username or password' });
+  }
+
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
     return res.status(401).json({ error: 'Incorrect username or password' });
