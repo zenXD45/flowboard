@@ -6,6 +6,7 @@ import { Comment } from '../models/Comment.js';
 import { User } from '../models/User.js';
 import { recordActivity } from '../models/Activity.js';
 import { ROLES, roleFor } from '../utils/permissions.js';
+import { PROFILE_FIELDS } from '../utils/shape.js';
 import { positionBetween, gapIsCollapsed, spacedPositions } from '../utils/position.js';
 import {
   cleanString,
@@ -223,7 +224,7 @@ export function registerMutations(io, socket) {
     if (username.error) return respond({ status: 'error', code: 'bad_request', message: username.error });
     const role = ROLES.filter((r) => r !== 'owner').includes(payload.role) ? payload.role : 'member';
 
-    const invitee = await User.findOne({ username: username.value.toLowerCase() }).select('_id username avatar').lean();
+    const invitee = await User.findOne({ username: username.value.toLowerCase() }).select(PROFILE_FIELDS).lean();
     if (!invitee) return respond({ status: 'error', code: 'not_found', message: `No user named "${username.value}"` });
     if (roleFor(access.board, invitee._id)) {
       return respond({ status: 'error', code: 'conflict', message: 'That person is already on the board' });
@@ -235,7 +236,15 @@ export function registerMutations(io, socket) {
       { $push: { members: { userId: invitee._id, role, addedAt } }, $set: { updatedAt: addedAt } }
     );
 
-    const member = { userId: String(invitee._id), username: invitee.username, avatar: invitee.avatar || '', role, addedAt };
+    const member = {
+      userId: String(invitee._id),
+      username: invitee.username,
+      displayName: invitee.displayName || '',
+      avatar: invitee.avatar || '',
+      avatarColor: invitee.avatarColor || '',
+      role,
+      addedAt
+    };
     io.to(room(access.board._id)).emit('member:added', { boardId: String(access.board._id), member });
 
     const activity = await logActivity({

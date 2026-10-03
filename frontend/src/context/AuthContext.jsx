@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, setToken, tokenPresent } from '../lib/api.js';
 import { disconnect } from '../lib/socket.js';
+import { applyTheme, storeTheme, storedTheme, watchSystemTheme } from '../lib/theme.js';
 
 const AuthContext = createContext(null);
 
@@ -92,6 +93,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
+   * The server's copy of `theme` wins once we know it, but the inline script in
+   * index.html already applied the last choice from localStorage before React
+   * existed. Mirroring back here is what keeps a reload on a different device —
+   * or after clearing storage — consistent with the account rather than the
+   * generic system default.
+   */
+  useEffect(() => {
+    const preference = user?.theme || storedTheme();
+    if (user?.theme) storeTheme(user.theme);
+    else applyTheme(preference);
+    if (preference !== 'system') return undefined;
+    return watchSystemTheme(() => applyTheme('system'));
+  }, [user?.theme]);
+
+  const updateUser = useCallback((patch) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
+  /**
    * Finish a social sign-in on return from the provider.
    *
    * The server hands back `#code=…` rather than a token, so the JWT is obtained
@@ -109,6 +129,7 @@ export function AuthProvider({ children }) {
       const messages = {
         cancelled: 'Sign-in was cancelled.',
         'invalid-state': 'That sign-in link could not be verified. Please try again.',
+        'already-linked': 'That account is already connected to a different FlowBoard account.',
         failed: 'Social sign-in did not complete. Please try again.'
       };
       window.dispatchEvent(
@@ -143,7 +164,10 @@ export function AuthProvider({ children }) {
     };
   }, [handoff]);
 
-  const value = useMemo(() => ({ user, ready, signup, login, logout }), [user, ready, signup, login, logout]);
+  const value = useMemo(
+    () => ({ user, ready, signup, login, logout, updateUser }),
+    [user, ready, signup, login, logout, updateUser]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

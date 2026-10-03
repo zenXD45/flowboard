@@ -6,6 +6,7 @@ import { Activity } from '../models/Activity.js';
 import { User } from '../models/User.js';
 import config from '../config/index.js';
 import { roleFor, canView, publicMember } from '../utils/permissions.js';
+import { publicProfile, PROFILE_FIELDS } from '../utils/shape.js';
 
 export async function listBoards(req, res) {
   const boards = await Board.find({ 'members.userId': req.userId })
@@ -21,8 +22,8 @@ export async function listBoards(req, res) {
   const countById = new Map(counts.map((c) => [String(c._id), c.count]));
 
   const peopleIds = [...new Set(boards.flatMap((b) => b.members.map((m) => String(m.userId))))];
-  const people = await User.find({ _id: { $in: peopleIds } }).select('username avatar').lean();
-  const peopleById = new Map(people.map((p) => [String(p._id), { username: p.username, avatar: p.avatar || '' }]));
+  const people = await User.find({ _id: { $in: peopleIds } }).select(PROFILE_FIELDS).lean();
+  const peopleById = new Map(people.map((p) => [String(p._id), publicProfile(p)]));
 
   res.json({
     boards: boards.map((b) => {
@@ -32,11 +33,16 @@ export async function listBoards(req, res) {
         ...meta,
         role: me,
         cardCount: countById.get(String(b._id)) || 0,
-        people: meta.members.map((m) => ({
-          userId: m.userId,
-          username: peopleById.get(m.userId)?.username || 'unknown',
-          avatar: peopleById.get(m.userId)?.avatar || ''
-        }))
+        people: meta.members.map((m) => {
+          const person = peopleById.get(m.userId);
+          return {
+            userId: m.userId,
+            username: person?.username || 'unknown',
+            displayName: person?.displayName || '',
+            avatar: person?.avatar || '',
+            avatarColor: person?.avatarColor || ''
+          };
+        })
       };
     })
   });
@@ -64,10 +70,8 @@ export async function getBoard(req, res) {
   const peopleIds = [
     ...new Set([String(board.ownerId), ...board.members.map((m) => String(m.userId))])
   ];
-  const people = await User.find({ _id: { $in: peopleIds } }).select('username avatar').lean();
-  const peopleById = Object.fromEntries(
-    people.map((p) => [String(p._id), { username: p.username, avatar: p.avatar || '' }])
-  );
+  const people = await User.find({ _id: { $in: peopleIds } }).select(PROFILE_FIELDS).lean();
+  const peopleById = Object.fromEntries(people.map((p) => [String(p._id), publicProfile(p)]));
 
   res.json({
     board: publicMember(board),
@@ -124,8 +128,8 @@ export async function getActivity(req, res) {
   const page = hasMore ? rows.slice(0, limit) : rows;
 
   const actorIds = [...new Set(page.map((r) => String(r.actorId)))];
-  const actors = await User.find({ _id: { $in: actorIds } }).select('username avatar').lean();
-  const actorsById = Object.fromEntries(actors.map((a) => [String(a._id), a.username]));
+  const actors = await User.find({ _id: { $in: actorIds } }).select(PROFILE_FIELDS).lean();
+  const actorsById = Object.fromEntries(actors.map((a) => [String(a._id), a.displayName || a.username]));
 
   res.json({
     activity: page.map((r) => ({

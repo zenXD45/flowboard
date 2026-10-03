@@ -45,6 +45,10 @@ const config = {
   jwtSecret: readEnv('JWT_SECRET', isProduction ? '' : 'flowboard-dev-only-secret-not-for-prod'),
   jwtTtlDays: Number(readEnv('JWT_TTL_DAYS', '7')),
   bodyLimitBytes: 64 * 1024,
+  // Only the avatar upload route uses this. A 128x128 browser-resized image is
+  // a few KB, but base64 inflates it by a third and the client is not trusted to
+  // have resized at all, so the ceiling is generous while the reject is explicit.
+  avatarLimitBytes: 512 * 1024,
   maxListsPerBoard: 30,
   maxCardsPerList: 500,
   activityPageSize: 40

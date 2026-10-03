@@ -12,6 +12,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import Column from './Column.jsx';
 import Avatar from './Avatar.jsx';
+import AvatarMenu from './AvatarMenu.jsx';
 import Icon from './Icon.jsx';
 import Toasts from './Toasts.jsx';
 import BoardPanel from './BoardPanel.jsx';
@@ -30,9 +31,11 @@ function PresenceBar({ presence, people, selfId }) {
             key={p.userId}
             userId={p.userId}
             username={profile?.username || p.username}
+            displayName={profile?.displayName || p.displayName}
             avatar={profile?.avatar || p.avatar}
+            avatarColor={profile?.avatarColor || p.avatarColor}
             size={26}
-            title={p.userId === selfId ? 'You' : profile?.username || p.username}
+            title={p.userId === selfId ? 'You' : profile?.displayName || profile?.username || p.displayName || p.username}
           />
         );
       })}
@@ -144,6 +147,7 @@ export default function Board({ selfId }) {
           <button type="button" className="ghostbtn" data-testid="open-people" onClick={() => setPanel({ kind: 'people' })}>
             <Icon name="users" size={14} /> People
           </button>
+          <AvatarMenu />
         </div>
       </header>
 

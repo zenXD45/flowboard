@@ -3,16 +3,12 @@ import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import { User } from '../models/User.js';
 import { signToken } from '../utils/token.js';
+import { publicSelf, publicProfile, PROFILE_FIELDS } from '../utils/shape.js';
+import { USERNAME_RE, EMAIL_RE } from '../utils/validate.js';
 
-const USERNAME_RE = /^[a-z0-9_-]{3,24}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // 12 rounds is the production cost. Tests pay the same price per hash on every
 // signup, so drop it there and keep the suite under a few seconds.
 const BCRYPT_ROUNDS = config.isTest ? 4 : 12;
-
-function shape(user) {
-  return { id: String(user._id), username: user.username, email: user.email || '', avatar: user.avatar || '' };
-}
 
 export async function signup(req, res) {
   const { username, password, email } = req.body || {};
@@ -45,7 +41,7 @@ export async function signup(req, res) {
     throw err;
   }
 
-  res.status(201).json({ token: signToken(user._id), user: shape(user) });
+  res.status(201).json({ token: signToken(user._id), user: publicSelf(user) });
 }
 
 export async function login(req, res) {
@@ -75,11 +71,11 @@ export async function login(req, res) {
     return res.status(401).json({ error: 'Incorrect username or password' });
   }
 
-  res.json({ token: signToken(user._id), user: shape(user) });
+  res.json({ token: signToken(user._id), user: publicSelf(user) });
 }
 
 export async function me(req, res) {
-  res.json({ user: shape(req.user) });
+  res.json({ user: publicSelf(req.user) });
 }
 
 export async function searchUsers(req, res) {
@@ -89,13 +85,11 @@ export async function searchUsers(req, res) {
     _id: { $ne: req.userId },
     username: { $regex: `^${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' }
   })
-    .select('username avatar')
+    .select(PROFILE_FIELDS)
     .limit(10)
     .lean();
 
-  res.json({
-    users: users.map((u) => ({ id: String(u._id), username: u.username, avatar: u.avatar || '' }))
-  });
+  res.json({ users: users.map(publicProfile) });
 }
 
 export async function directoryOf(req, res) {
@@ -104,8 +98,6 @@ export async function directoryOf(req, res) {
     .map((s) => s.trim())
     .filter((s) => mongoose.isValidObjectId(s))
     .slice(0, 50);
-  const users = await User.find({ _id: { $in: ids } }).select('username avatar').lean();
-  res.json({
-    users: users.map((u) => ({ id: String(u._id), username: u.username, avatar: u.avatar || '' }))
-  });
+  const users = await User.find({ _id: { $in: ids } }).select(PROFILE_FIELDS).lean();
+  res.json({ users: users.map(publicProfile) });
 }

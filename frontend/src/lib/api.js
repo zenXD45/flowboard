@@ -64,6 +64,13 @@ export const api = {
   signup: (body) => request('/api/auth/signup', { method: 'POST', body }),
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
   me: () => request('/api/auth/me'),
+  updateProfile: (body) => request('/api/auth/me', { method: 'PATCH', body }),
+  uploadAvatar: (image) => request('/api/auth/avatar', { method: 'POST', body: { image } }),
+  changePassword: (body) => request('/api/auth/password', { method: 'POST', body }),
+  connections: () => request('/api/auth/connections'),
+  linkProvider: (provider) => request(`/api/auth/link/${provider}`, { method: 'POST' }),
+  unlinkProvider: (provider) => request(`/api/auth/connections/${provider}`, { method: 'DELETE' }),
+  deleteAccount: (body) => request('/api/auth/account', { method: 'DELETE', body }),
   oauthProviders: () => request('/auth/providers'),
   // Trades the single-use handoff code from the OAuth redirect for a normal
   // JWT. This is the only place a session token is minted for a social sign-in.
@@ -77,3 +84,13 @@ export const api = {
     return request(`/api/boards/${id}/activity?${params.toString()}`);
   }
 };
+
+/**
+ * An avatar is either an absolute provider URL or a path this API serves
+ * (`/users/:id/avatar`). Only the relative form needs the origin put back in
+ * front of it — prepending blindly would turn a valid https URL into garbage.
+ */
+export function avatarSrc(src) {
+  if (!src) return '';
+  return /^https?:\/\//i.test(src) ? src : `${API_BASE}${src}`;
+}

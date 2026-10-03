@@ -1,5 +1,15 @@
 const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
 
+/** The handle format every board, membership and activity row references. */
+export const USERNAME_RE = /^[a-z0-9_-]{3,24}$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * How many entries the avatar palette has. The colours themselves live in
+ * frontend/src/components/Avatar.jsx; this is only the bound the server
+ * validates against, so a user cannot store an index that renders as blank.
+ */
+export const AVATAR_COLORS = 5;
+
 /**
  * A client-supplied id must be a plain 24-character hex string.
  *

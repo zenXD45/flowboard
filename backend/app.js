@@ -8,6 +8,7 @@ import config from './config/index.js';
 import { isOriginAllowed, isSelfOrigin } from './utils/origins.js';
 import { requireAuth } from './middleware/auth.js';
 import * as auth from './controllers/auth.controller.js';
+import * as profile from './controllers/profile.controller.js';
 import * as boards from './controllers/boards.controller.js';
 import { authRoutes } from './routes/auth.routes.js';
 
@@ -44,7 +45,7 @@ export function createApp(overrides = {}) {
   };
   app.use(helmet({ contentSecurityPolicy: { directives: cspDirectives } }));
 
-  const corsMethods = ['GET', 'POST', 'PATCH', 'OPTIONS'];
+  const corsMethods = ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'];
   const corsHeaders = ['Content-Type', 'Authorization'];
 
   app.use(
@@ -86,6 +87,11 @@ export function createApp(overrides = {}) {
   app.use('/api/auth/signup', authLimiter);
   app.use('/api/auth/login', authLimiter);
 
+  // An uploaded avatar is a data URL the browser already resized to 128x128, so
+  // it is still far larger than the global 64 KB JSON limit. Only this one path
+  // gets the larger parser; body-parser marks the request as parsed, so the
+  // global parser below then skips it and the DoS surface stays where it was.
+  app.use('/api/auth/avatar', express.json({ limit: cfg.avatarLimitBytes, type: ['application/json'] }));
   app.use(express.json({ limit: cfg.bodyLimitBytes, type: ['application/json'] }));
   app.use(express.urlencoded({ extended: false }));
 
@@ -115,8 +121,23 @@ export function createApp(overrides = {}) {
   api.post('/auth/signup', auth.signup);
   api.post('/auth/login', auth.login);
   api.get('/auth/me', requireAuth, auth.me);
+  // Profile and settings are reads *and* writes over HTTP. The read/write split
+  // that puts board mutations on the socket is about board state, which needs
+  // fan-out to a room; an account change concerns one user and has no room to
+  // broadcast to, exactly like signup and login above.
+  api.patch('/auth/me', requireAuth, profile.updateMe);
+  api.post('/auth/avatar', requireAuth, profile.uploadAvatar);
+  api.post('/auth/password', requireAuth, profile.changePassword);
+  api.get('/auth/connections', requireAuth, profile.listConnections);
+  api.post('/auth/link/:provider', requireAuth, profile.startLink);
+  api.delete('/auth/connections/:provider', requireAuth, profile.unlinkConnection);
+  api.delete('/auth/account', requireAuth, profile.deleteAccount);
+
   api.get('/users', requireAuth, auth.searchUsers);
   api.get('/users/directory', requireAuth, auth.directoryOf);
+  // No requireAuth: an <img> tag cannot carry the Bearer token, and the id is an
+  // opaque ObjectId that already appears in payloads the viewer was allowed to read.
+  api.get('/users/:id/avatar', profile.getAvatar);
 
   api.get('/boards', requireAuth, boards.listBoards);
   api.get('/boards/:boardId', requireAuth, boards.getBoard);

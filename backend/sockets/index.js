@@ -3,6 +3,7 @@ import { verifyToken } from '../utils/token.js';
 import { User } from '../models/User.js';
 import { loadAccess } from './access.js';
 import { registerMutations } from './mutations.js';
+import { PROFILE_FIELDS } from '../utils/shape.js';
 
 const room = (boardId) => `board:${boardId}`;
 
@@ -20,7 +21,14 @@ async function presenceOf(io, boardId) {
     if (!id) continue;
     const existing = byUser.get(id);
     if (existing) existing.sockets += 1;
-    else byUser.set(id, { userId: id, username: s.data?.username || 'unknown', avatar: s.data?.avatar || '', sockets: 1 });
+    else byUser.set(id, {
+      userId: id,
+      username: s.data?.username || 'unknown',
+      displayName: s.data?.displayName || '',
+      avatar: s.data?.avatar || '',
+      avatarColor: s.data?.avatarColor || '',
+      sockets: 1
+    });
   }
   return [...byUser.values()];
 }
@@ -40,12 +48,14 @@ async function broadcastPresence(io, boardId) {
  */
 function hydrateProfile(socket) {
   User.findById(socket.data.userId)
-    .select('username avatar')
+    .select(PROFILE_FIELDS)
     .lean()
     .then(async (user) => {
       if (!user) return;
       socket.data.username = user.username;
+      socket.data.displayName = user.displayName || '';
       socket.data.avatar = user.avatar || '';
+      socket.data.avatarColor = user.avatarColor || '';
       for (const boardId of socket.data.boards) {
         await broadcastPresence(socket.io, boardId);
       }
@@ -62,7 +72,9 @@ export default function initSockets(io) {
     if (!payload) return next(new Error('You must be signed in'));
     socket.data.userId = payload.sub;
     socket.data.username = 'unknown';
+    socket.data.displayName = '';
     socket.data.avatar = '';
+    socket.data.avatarColor = '';
     socket.data.boards = new Set();
     next();
   });

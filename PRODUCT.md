@@ -21,12 +21,16 @@ invite a collaborator by username, and work on it together. Cards have a title, 
 date, an assignee, comments, and a place on the board. The board shows who else is
 looking at it right now and what changed while you were away.
 
+An account page manages the profile — display name, username, email, avatar,
+password, connected sign-in providers, and light/dark/system theme — and can
+delete the account and everything it owns.
+
 ## Deliberate non-goals
 
 | Not doing | Why |
 | --- | --- |
 | Accounts with email verification of their own | Nothing in the app needs to prove identity; it would add a whole signup-abandonment problem for no gain. Note this is about *verifying* an address we hold — a Google or GitHub sign-in still only links to an existing account when that provider asserts the address is verified |
-| File attachments | Storage, virus scanning, and CDN cost, none of which demonstrate anything the rest of the app does not |
+| File attachments | Storage, virus scanning, and CDN cost, none of which demonstrate anything the rest of the app does not. Profile avatars are the single exception and are not "attachments": the browser resizes the image to 128px, the bytes live on the user document, and they are served from the user's own id — no bucket, no scanning, no CDN |
 | Recurring cards / subtasks | Depth in one feature beats breadth across five |
 | Drag to reorder lists | The data model supports it; the UI does not yet. Shipping a half-built interaction would be worse than not offering it |
 | Offline editing | The optimistic UI is halfway there, but a real offline queue is a substantial subsystem and pretending otherwise would be dishonest |
@@ -59,8 +63,8 @@ looking at it right now and what changed while you were away.
 ## Data model
 
 ```
-User     username (unique), passwordHash (absent for social-only accounts),
-         email, emailVerified, avatar
+User     username (unique), displayName, passwordHash (absent for social-only
+         accounts), email, emailVerified, avatar, avatarColor, avatarUpload, theme
 OAuthAccount  provider + providerUserId (unique together), userId, email
 Board    title, description, ownerId, members[], lists[]
 Card     boardId, listId, title, description, labels[], dueDate,
@@ -99,9 +103,9 @@ owner is an ambiguous state nobody wants to debug.
 ## Quality bar
 
 ```
-56  node:test            unit + integration, one database per file
+171 node:test            unit + integration, one database per file
 30  smoke.js             live API over real sockets and HTTP
-16  browser-test.js      two Chrome contexts, real drags, real reloads
+21  browser-test.js      two Chrome contexts, real drags, real reloads
 ```
 
 All passing, plus ESLint clean on the frontend (0 errors; the 2 warnings are

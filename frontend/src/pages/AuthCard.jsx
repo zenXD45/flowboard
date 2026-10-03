@@ -141,7 +141,7 @@ export default function AuthCard({ mode, onSwitch }) {
 
           {error && <p className="auth__error">{error}</p>}
 
-          <button type="submit" className="btn btn--wide" disabled={busy}>
+          <button type="submit" className={`btn btn--wide${busy ? ' btn--busy' : ''}`} disabled={busy}>
             {busy ? 'One moment…' : isSignup ? 'Create account' : 'Sign in'}
           </button>
         </form>

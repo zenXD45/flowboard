@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>FlowBoard — real-time collaborative Kanban</title>
+    <!-- Resolve the theme before the first paint. If this waited for React, a
+         user who chose light would see the dark tokens flash first; if it ran
+         only in an effect, the same flash would appear on every reload. Kept
+         inline and dependency-free so it executes ahead of the stylesheet. -->
+    <script>
+      (function () {
+        try {
+          var preference = localStorage.getItem('flowboard:theme');
+          var scheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          var theme = preference === 'light' || preference === 'dark' ? preference : scheme;
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>

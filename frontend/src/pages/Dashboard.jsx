@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
-import { disconnect, emit, getSocket } from '../lib/socket.js';
+import { emit, getSocket } from '../lib/socket.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import AvatarMenu from '../components/AvatarMenu.jsx';
 import Icon from '../components/Icon.jsx';
 import Toasts from '../components/Toasts.jsx';
 
@@ -11,7 +12,7 @@ const BLANK = ['', 'In progress', 'Done'];
 let toastSeq = 0;
 
 export default function Dashboard({ onOpen }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [boards, setBoards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
@@ -66,18 +67,9 @@ export default function Dashboard({ onOpen }) {
       <header className="dash__top">
         <div>
           <h1 className="dash__brand">FlowBoard</h1>
-          <p className="muted">Signed in as {user?.username}</p>
+          <p className="muted">Signed in as {user?.displayName || user?.username}</p>
         </div>
-        <button
-          type="button"
-          className="ghostbtn"
-          onClick={() => {
-            disconnect();
-            logout();
-          }}
-        >
-          Sign out
-        </button>
+        <AvatarMenu />
       </header>
 
       <form className="dash__new" onSubmit={create}>
@@ -107,7 +99,15 @@ export default function Dashboard({ onOpen }) {
             </span>
             <span className="boardcard__people">
               {(b.people || []).slice(0, 4).map((p) => (
-                <Avatar key={p.userId} userId={p.userId} username={p.username} avatar={p.avatar} size={22} />
+                <Avatar
+                  key={p.userId}
+                  userId={p.userId}
+                  username={p.username}
+                  displayName={p.displayName}
+                  avatar={p.avatar}
+                  avatarColor={p.avatarColor}
+                  size={22}
+                />
               ))}
             </span>
           </button>

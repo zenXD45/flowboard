@@ -3,19 +3,23 @@ import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AuthCard from './pages/AuthCard.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import BoardPage from './pages/BoardPage.jsx';
+import Settings from './pages/Settings.jsx';
 
-function readBoardFromHash() {
-  const match = window.location.hash.match(/^#\/board\/([a-f0-9]{24})$/i);
-  return match ? match[1] : null;
+function readRoute() {
+  const hash = window.location.hash;
+  const board = hash.match(/^#\/board\/([a-f0-9]{24})$/i);
+  if (board) return { name: 'board', boardId: board[1] };
+  if (hash === '#/settings') return { name: 'settings' };
+  return { name: 'home' };
 }
 
 function App() {
   const { user, ready } = useAuth();
   const [mode, setMode] = useState('login');
-  const [boardId, setBoardId] = useState(() => readBoardFromHash());
+  const [route, setRoute] = useState(readRoute);
 
   useEffect(() => {
-    const onHash = () => setBoardId(readBoardFromHash());
+    const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -24,7 +28,7 @@ function App() {
     window.location.hash = `#/board/${id}`;
   }, []);
 
-  const exitBoard = useCallback(() => {
+  const goHome = useCallback(() => {
     window.location.hash = '';
   }, []);
 
@@ -43,7 +47,8 @@ function App() {
     return <AuthCard mode={mode} onSwitch={() => setMode(mode === 'login' ? 'signup' : 'login')} />;
   }
 
-  if (boardId) return <BoardPage boardId={boardId} onExit={exitBoard} />;
+  if (route.name === 'settings') return <Settings onExit={goHome} />;
+  if (route.name === 'board') return <BoardPage boardId={route.boardId} onExit={goHome} />;
 
   return <Dashboard onOpen={openBoard} />;
 }

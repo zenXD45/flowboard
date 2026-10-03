@@ -96,7 +96,14 @@ export default function CardTile({ card, people, onOpen, disabled }) {
           </span>
         )}
         {assignee && (
-          <Avatar userId={card.assigneeId} username={assignee.username} avatar={assignee.avatar} size={22} />
+          <Avatar
+            userId={card.assigneeId}
+            username={assignee.username}
+            displayName={assignee.displayName}
+            avatar={assignee.avatar}
+            avatarColor={assignee.avatarColor}
+            size={22}
+          />
         )}
       </div>
     </article>

@@ -1,3 +1,5 @@
+import { avatarSrc } from '../lib/api.js';
+
 /* Every pair is verified at 4.6:1 or better, which matters because the fallback
    is rendered at ~10.5px — well under the size where 3:1 would be enough. */
 const PALETTE = [
@@ -8,25 +10,42 @@ const PALETTE = [
   ['#e6bcd0', '#9d1756']
 ];
 
+export const AVATAR_COLORS = PALETTE.length;
+
 function seedOf(value) {
   let total = 0;
   for (let i = 0; i < value.length; i += 1) total = (total * 31 + value.charCodeAt(i)) % 9973;
   return total;
 }
 
-export default function Avatar({ userId, username, avatar, size = 28, title }) {
+/**
+ * Picks the fallback pair. An explicit `avatarColor` (a stored index, as a
+ * string) wins over the id-derived one, but the empty string means "no choice",
+ * not "index zero" — hence the explicit emptiness check before Number().
+ */
+function paletteFor(id, avatarColor) {
+  if (avatarColor !== '' && avatarColor != null) {
+    const index = Number(avatarColor);
+    if (Number.isInteger(index) && index >= 0 && index < PALETTE.length) return PALETTE[index];
+  }
+  return PALETTE[seedOf(id) % PALETTE.length];
+}
+
+export default function Avatar({ userId, username, displayName, avatar, avatarColor, size = 28, title }) {
   const id = userId || username || '?';
-  const [bg, fg] = PALETTE[seedOf(id) % PALETTE.length];
-  const initials = (username || '?').slice(0, 2).toUpperCase();
+  const [bg, fg] = paletteFor(id, avatarColor);
+  const name = displayName || username || '?';
+  const src = avatarSrc(avatar);
+  const label = title || name;
 
   return (
     <span
       className="avatar"
-      style={{ width: size, height: size, background: avatar ? 'transparent' : bg, color: fg }}
-      title={title || username || 'Unknown'}
-      aria-label={username || 'Unknown member'}
+      style={{ width: size, height: size, background: src ? 'transparent' : bg, color: fg }}
+      title={label}
+      aria-label={label}
     >
-      {avatar ? <img src={avatar} alt="" width={size} height={size} /> : initials}
+      {src ? <img src={src} alt="" width={size} height={size} /> : name.slice(0, 2).toUpperCase()}
     </span>
   );
 }

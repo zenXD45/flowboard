@@ -247,7 +247,25 @@ socket knows who someone claimed it was."
 
 ---
 
-## 9. Touch, and the two CSS bugs that hid there
+## 9. Accounts, profiles, and theming
+
+**Settings are HTTP, not socket.** The board rule is "reads over REST, writes over the socket", and this is the deliberate exception that proves it: that split exists because a board write has to fan out to a room. An account change concerns exactly one user and has no room to broadcast to, which is also why signup, login and the OAuth exchange were already HTTP. Routing profile writes through the socket would add an acknowledgement path and a reconnection problem to a feature that needs neither.
+
+**The avatar is stored on the user but never travels with board data.** `avatarUpload` holds the resized image as a data URL, and `avatar` holds a short path (`/users/:id/avatar`) so the `.select('username avatar')` call sites stay small. Board projections select fields explicitly and never include `avatarUpload`; the raw bytes are read by the one route that serves them and nowhere else. That route is intentionally unauthenticated — an `<img>` cannot send a bearer token — and relies on the id being an opaque ObjectId that already appears in payloads the viewer was allowed to read. It answers `404` for a missing image, so a broken avatar is a missing image rather than an error page, and it is cached `immutable` for a day because the content behind a given id changes only when the user changes it.
+
+Validation has two layers. The data URL must name a raster type — SVG is refused, because it can carry script and would be served from our own origin — and the decoded bytes must match the claimed type's magic number, so a payload labelled `image/png` cannot smuggle anything else back out under an image content type. The scoped body parser (`512 KB`, mounted ahead of the global `64 KB` one) admits the upload without widening the limit every other endpoint runs under.
+
+**A typed email is never trusted; a provider's assertion is.** `emailVerified` is only ever set by a provider callback, never by `PATCH /auth/me`, and it is the sole signal `resolveUser` uses to attach a social identity to an existing account. Letting a self-declared address set that flag would let anyone claim anyone's account by typing their address. Changing the email in settings always clears the flag, even when the new value happens to match.
+
+**Connecting a provider uses a link intent, not a sign-in.** The normal OAuth callback resolves a user by verified email and, failing that, creates a new one — correct for the sign-in screen, wrong for a "Connect" button on an account you are already inside, where it could silently switch you into a different account. `POST /api/auth/link/:provider` mints a short-lived token scoped to `purpose: oauth-link`, and the callback binds the identity to the token's subject while ignoring email entirely. It cannot be the session JWT: the OAuth start is a top-level navigation that cannot set an `Authorization` header, and a 7-day session token in a URL would leak into history and `Referer` headers. A 10-minute token that can only attach an identity — never sign in — limits what a leaked URL could do. Unlinking refuses to remove the last way in: a social-only account with one provider and no password gets a `409` and a message to set a password first.
+
+**Theme is resolved in JS, not by a media query.** `prefers-color-scheme` can only express the system preference; it cannot represent "dark, because I said so" on a light desktop, which is exactly the choice the setting exists to offer. The resolved value is written to `data-theme` on `<html>`, so an explicit choice and the system preference land on the same CSS selector. The resolution runs in an inline script in `index.html` before the stylesheet paints, because doing it in React would flash the default palette on every reload, and the server's copy of `theme` is mirrored into `localStorage` so a cold boot on a fresh tab is correct before any request completes.
+
+**Deleting an account is scoped by ownership.** Boards the user owns are destroyed along with their cards, comments and activity. Boards where they were only a member survive: their membership is pulled and any cards assigned to them are unassigned, because that content belongs to the board, not to the person leaving. Confirmation requires typing the username, plus the password when one exists.
+
+---
+
+## 10. Touch, and the two CSS bugs that hid there
 
 The desktop build passed its browser test and was still broken on a phone, in
 two ways that only a real touch emulation found.
@@ -312,12 +330,12 @@ the desktop suite and obvious within a minute of emulation.
 
 ---
 
-## 10. Tests
+## 11. Tests
 
 ```
-56  node:test suites      unit + integration, isolated database per file
+171 node:test suites      unit + integration, isolated database per file
 30  smoke.js              live API, real sockets, real HTTP
-16  browser-test.js       two Chrome contexts, synthetic pointer drags
+21  browser-test.js       two Chrome contexts, synthetic pointer drags
    android audit          Pixel 7 + 360px Android, real touch gestures
 ```
 
@@ -354,7 +372,7 @@ recorded it — the only symptom was a textarea that silently refilled itself.
 
 ---
 
-## 11. Trade-offs I would revisit
+## 12. Trade-offs I would revisit
 
 **No offline support.** An optimistic UI is halfway to an offline-first one, and
 this app stops at halfway: it renders optimistically but has no queue, so a move
@@ -370,7 +388,7 @@ deployment would want a TTL or a retention window.
 
 ---
 
-## 12. Deployment
+## 13. Deployment
 
 ### API — Render
 
@@ -387,8 +405,16 @@ Environment variables to set:
 | --- | --- |
 | `MONGODB_URL` | MongoDB Atlas M0 — free, 512 MB, shared |
 | `JWT_SECRET` | Generated by Render |
-| `FRONTEND_URL` | Your Vercel URL, for the CORS allowlist |
+| `FRONTEND_URL` | Your Vercel URL, for the CORS allowlist and OAuth redirects |
+| `PUBLIC_URL` | This service's public URL, for OAuth callbacks |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud console OAuth app |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app |
 | `REDIS_URL` | Optional, only for multiple instances |
+
+The OAuth variables are declared in `render.yaml` with `sync: false`, so they are
+entered in the dashboard and never committed. A provider button only appears once
+its credentials are present, so an unconfigured deployment hides the social
+sign-in rather than offering a button that fails.
 
 ### Database — MongoDB Atlas M0
 
@@ -417,7 +443,7 @@ I would rather state these plainly than let a reviewer discover them.
 
 ---
 
-## 13. Interview questions this project answers
+## 14. Interview questions this project answers
 
 - **How do you handle two people editing the same thing?**
   Integer version per card, compare-and-set on write, server returns the

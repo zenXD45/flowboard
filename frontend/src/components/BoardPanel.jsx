@@ -179,10 +179,17 @@ function CardDetail({ cardId, onClose, selfId }) {
           {comments.length === 0 && <p className="muted">No comments yet.</p>}
           {comments.map((c) => (
             <div key={c.id} className="comment">
-              <Avatar userId={c.authorId} username={people[c.authorId]?.username || c.authorName} size={22} />
+              <Avatar
+                userId={c.authorId}
+                username={people[c.authorId]?.username || c.authorName}
+                displayName={people[c.authorId]?.displayName}
+                avatar={people[c.authorId]?.avatar}
+                avatarColor={people[c.authorId]?.avatarColor}
+                size={22}
+              />
               <div>
                 <p className="comment__meta">
-                  <strong>{people[c.authorId]?.username || c.authorName || 'Someone'}</strong> · {when(c.createdAt)}
+                  <strong>{people[c.authorId]?.displayName || people[c.authorId]?.username || c.authorName || 'Someone'}</strong> · {when(c.createdAt)}
                 </p>
                 <p className="comment__body">{c.body}</p>
               </div>
@@ -258,9 +265,16 @@ function PeoplePanel({ onClose, selfId }) {
         <ul className="people">
           {board?.members.map((m) => (
             <li key={m.userId}>
-              <Avatar userId={m.userId} username={people[m.userId]?.username} size={30} />
+              <Avatar
+                userId={m.userId}
+                username={people[m.userId]?.username}
+                displayName={people[m.userId]?.displayName}
+                avatar={people[m.userId]?.avatar}
+                avatarColor={people[m.userId]?.avatarColor}
+                size={30}
+              />
               <div className="people__who">
-                <strong>{people[m.userId]?.username || m.userId}</strong>
+                <strong>{people[m.userId]?.displayName || people[m.userId]?.username || m.userId}</strong>
                 {m.userId === selfId && <span className="muted"> you</span>}
               </div>
               {m.role === 'owner' || !isOwner ? (
