@@ -80,21 +80,29 @@
 /* The theme is resolved in JS and set as `data-theme` on <html> (see
    lib/theme.js), so this is the only place the light palette lives — an
    explicit light choice and a light system preference both land here. */
+/* Depth ladder, darkest to lightest. The dark theme is held together by its
+   borders, which are visible against near-black; a light theme has to get
+   structure from tone instead. The values before this were flat: --surface-2
+   and --surface-1 were both #ffffff, so every hover fill, input and segmented
+   track measured exactly 1.00:1 against the card or topbar it sat on, and
+   --surface-col against --bg was 1.03:1, so columns had no fill separation at
+   all. Only dark mode looked like it had states. */
 :root[data-theme="light"] {
-  --bg: #f6f4f1;
-  --surface-1: #ffffff;
-  --surface-2: #ffffff;
-  --surface-3: #f1ede8;
-  --surface-col: #f9f7f4;
+  --bg: #eeebe5; /* the canvas, deliberately recessed */
+  --surface-1: #ffffff; /* cards, panels, topbar */
+  --surface-2: #f7f4ef; /* inputs, hover fills */
+  --surface-3: #ece7df; /* pressed / nested chips */
+  --surface-col: #fbfaf8; /* a list on the board canvas */
   --scrim: rgb(40 30 22 / 42%);
 
-  --line: #e3ddd5;
-  --line-soft: #efeae3;
-  --line-strong: #c9c1b7;
+  --line: #dcd5cb;
+  --line-soft: #e6e0d6;
+  --line-strong: #bab2a7;
 
-  --ink: #211d1a; /* 14.4:1 worst case */
-  --ink-2: #57504a; /*  6.8:1 */
-  --ink-3: #6b625b; /*  5.1:1 */
+  /* Every ink value is verified against the worst surface it lands on. */
+  --ink: #211d1a; /* 14.1:1 worst case */
+  --ink-2: #57504a; /*  6.7:1 */
+  --ink-3: #665e57; /*  5.3:1 — darkened to hold 4.5:1 on the recessed canvas */
 
   --accent: #1f6653;
   --accent-ink: #ffffff; /* 6.8:1 */
@@ -158,6 +166,22 @@ p { margin: 0; }
 ::selection { background: var(--accent-line); color: var(--ink); }
 
 .muted { color: var(--ink-3); }
+
+/* A label that exists for assistive technology but must not take a slot in a
+   dense layout. `clip-path` rather than `display: none` or `visibility: hidden`,
+   both of which remove it from the accessibility tree — which is the entire
+   point of writing it. */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 .icon { flex-shrink: 0; display: block; }
 
@@ -348,6 +372,10 @@ input, textarea, select {
   background: var(--surface-2);
   color: var(--ink);
   outline: none;
+  /* The caret ships with the browser's default blue, which belongs to no
+     palette. Matching it to the accent is the cheapest signal that the field
+     was designed rather than dropped in. */
+  caret-color: var(--accent-text);
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
@@ -471,11 +499,13 @@ label input, label textarea { margin-top: 5px; }
 .auth__social { display: grid; gap: 9px; margin-bottom: 18px; animation: settle var(--t-base) var(--ease); }
 .auth__social:empty { display: none; }
 
-/* Transparent rather than a surface fill: in light mode --surface-1 and
-   --surface-2 are both #ffffff, so any fill would vanish into the card and only
-   the border would remain. This mirrors .btn--ghost, which is verified against
-   both themes, and keeps the accent submit button below as the single primary
-   action while social sits first by position. */
+/* Transparent rather than a surface fill: the card is already a surface, so a
+   second resting fill inside it would either add a step nobody asked for or
+   disappear into it. The border carries the resting state and the hover fill
+   below uses --surface-2, which is distinct from --surface-1 in both themes.
+   This mirrors .btn--ghost, which is verified against both themes, and keeps
+   the accent submit button below as the single primary action while social
+   sits first by position. */
 .auth__provider {
   display: flex;
   align-items: center;
@@ -550,6 +580,11 @@ label input, label textarea { margin-top: 5px; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
   gap: 12px;
+  /* One beat for the grid as a whole, not a card-by-card stagger. The board
+     already owns the sequenced entrance; repeating it here would make the same
+     gesture the app's default instead of its signature. */
+  animation: settle var(--t-slow) var(--ease) backwards;
+  animation-delay: 40ms;
 }
 
 .boardcard {
@@ -566,10 +601,23 @@ label input, label textarea { margin-top: 5px; }
   transition: border-color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease),
     transform var(--t-base) var(--ease);
 }
-.boardcard:hover {
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-2);
-  transform: translateY(-2px);
+/* Gated on a real pointer, because the hover lifts the card. A touch device has
+   no hover to leave, so the lift would stick after every tap that opened a
+   board and stay until the page changed. `.card:hover` below is not gated: it
+   only moves the border and the shadow, which are harmless when they linger. */
+@media (hover: hover) and (pointer: fine) {
+  .boardcard:hover {
+    border-color: var(--accent-line);
+    box-shadow: var(--shadow-2);
+    transform: translateY(-2px);
+  }
+}
+/* A press has to be felt. Without this the only response to tapping a board
+   card is the navigation itself, and a card that lifts on hover but never
+   yields under a finger reads as broken. */
+.boardcard:active {
+  box-shadow: var(--shadow-1);
+  transform: translateY(0) scale(0.985);
 }
 .boardcard__icon { color: var(--accent-text); }
 .boardcard__title { font-weight: 600; line-height: 1.35; }
@@ -843,6 +891,35 @@ label input, label textarea { margin-top: 5px; }
 }
 .addlist:hover { border-color: var(--accent-text); background: var(--accent-wash); color: var(--accent-text); }
 .addlist:active { transform: scale(0.98); }
+
+/* The one authored moment on this surface: a board assembles the way it is
+   read — list by list, with the cards of each list following a beat behind it.
+   It turns the hard cut from skeleton to content into a sequence that explains
+   the structure at the moment the user arrives, and it is scoped to `.board`,
+   so the same entrance never repeats on the dashboard, the sheet or settings.
+
+   `.column` is a droppable and never a sortable, so nothing else writes its
+   `transform`. `.card` is the opposite case: the card carries an inline
+   `transform` from dnd-kit, and a CSS animation outranks an inline style in the
+   cascade, so keyframing `transform` here would pin a card at its entrance
+   offset for the whole animation and throw off every drag measurement made
+   inside that window. The independent `translate` property composes with
+   `transform` instead of competing with it. */
+.board .column {
+  animation: column-rise var(--t-slow) var(--ease) backwards;
+  animation-delay: calc(var(--col, 0) * 65ms);
+}
+@keyframes column-rise {
+  from { opacity: 0; transform: translateY(12px); }
+}
+
+.board .card {
+  animation: card-rise var(--t-base) var(--ease) backwards;
+  animation-delay: calc(140ms + var(--col, 0) * 65ms + var(--i, 0) * 30ms);
+}
+@keyframes card-rise {
+  from { opacity: 0; translate: 0 8px; }
+}
 
 /* -------------------------------------------------------------------- card */
 
@@ -1167,6 +1244,16 @@ label input, label textarea { margin-top: 5px; }
   border: 1px solid var(--line);
   border-radius: var(--r-3);
   box-shadow: var(--shadow-3);
+  /* Anchored under the avatar and right-aligned to it, so it grows out of the
+     control that opened it rather than popping in from its own centre.
+     `scale` rather than `scale(0)`: a menu has shape even before it arrives,
+     and starting from nothing reads as a glitch rather than an opening. */
+  transform-origin: top right;
+  animation: menu-in var(--t-base) var(--ease);
+}
+
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
 }
 
 .avmenu__head {
@@ -1195,8 +1282,15 @@ label input, label textarea { margin-top: 5px; }
   font-size: 13.5px;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
-.avmenu__item:hover { background: var(--surface-2); }
+.avmenu__item:active { transform: scale(0.98); }
+
+/* Gated on a real pointer. On touch, `:hover` sticks after the tap that opened
+   the menu, which would leave the chosen row painted as if still selected. */
+@media (hover: hover) and (pointer: fine) {
+  .avmenu__item:hover { background: var(--surface-2); }
+}
 
 /* ------------------------------------------------------------------ settings */
 
@@ -1219,6 +1313,9 @@ label input, label textarea { margin-top: 5px; }
   border-radius: var(--r-2);
   background: var(--surface-2);
   font-size: 13.5px;
+  /* Feedback that arrives rather than appears. The element is keyed on the
+     notice id, so each save remounts it and the acknowledgement replays. */
+  animation: rise var(--t-base) var(--ease);
 }
 .settings__notice--error { border-color: var(--danger-fill); color: var(--danger); }
 
@@ -1249,13 +1346,25 @@ label input, label textarea { margin-top: 5px; }
   border: 2px solid transparent;
   border-radius: 50%;
   cursor: pointer;
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+.swatch:active { transform: scale(0.9); }
+@media (hover: hover) and (pointer: fine) {
+  .swatch:hover { transform: scale(1.08); }
 }
 .swatch:nth-child(1) { background: #e6ccbc; }
 .swatch:nth-child(2) { background: #bce6d1; }
 .swatch:nth-child(3) { background: #c9bce6; }
 .swatch:nth-child(4) { background: #e6d9bc; }
 .swatch:nth-child(5) { background: #e6bcd0; }
-.swatch--on { border-color: var(--ink); }
+/* A ring around the chosen colour rather than a change to it: the selection has
+   to read as a mark, not as a hue difference the user has to compare against
+   the four they did not pick. The inner gap is the card the swatches sit on. */
+.swatch--on {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3px var(--line-strong);
+}
 
 .settings__avatarurl { display: flex; gap: 8px; }
 .settings__avatarurl input { flex: 1; }
@@ -1281,8 +1390,24 @@ label input, label textarea { margin-top: 5px; }
   color: var(--ink-2);
   font-size: 13px;
   cursor: pointer;
+  transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease),
+    box-shadow var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
 }
-.segmented__option--on { background: var(--surface-1); color: var(--ink); box-shadow: var(--shadow-1); }
+.segmented__option:active { transform: scale(0.96); }
+
+/* The selected state is an accent tint rather than a surface swap. The surface
+   route only works when the two surfaces are different, and they were not:
+   light mode put a #ffffff option on a #ffffff track — 1.00:1, so choosing a
+   theme showed no visible answer — while dark put a #171615 option on a
+   #201e1c track, darker than its own track, which reads as pressed rather than
+   picked. Accent is what this UI already uses for "active" (the drop target,
+   the focused field), and the inset ring keeps the state legible without
+   depending on hue alone. */
+.segmented__option--on {
+  background: var(--accent-wash);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
 
 .settings__connections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .settings__connection {

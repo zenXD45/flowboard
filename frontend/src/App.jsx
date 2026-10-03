@@ -25,6 +25,10 @@ function App() {
   }, []);
 
   const openBoard = useCallback((id) => {
+    // `readRoute` only ever accepts a 24-hex id, so an id that fails here would
+    // produce a hash the app cannot open — navigating anyway would show an empty
+    // board rather than nothing.
+    if (!/^[a-f0-9]{24}$/i.test(String(id))) return;
     window.location.hash = `#/board/${id}`;
   }, []);
 

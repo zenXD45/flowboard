@@ -4,7 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import CardTile from './CardTile.jsx';
 import Icon from './Icon.jsx';
 
-export default function Column({ list, cards, people, canEdit, onOpenCard, onCreateCard, onRename, onDelete }) {
+export default function Column({ list, cards, people, canEdit, index = 0, onOpenCard, onCreateCard, onRename, onDelete }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
@@ -45,7 +45,7 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
   };
 
   return (
-    <section className="column" aria-label={list.title}>
+    <section className="column" aria-label={list.title} style={{ '--col': index }}>
       <header className="column__head">
         {renaming ? (
           <input
@@ -115,10 +115,11 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
 
       <div ref={setNodeRef} className={`column__body ${isOver ? 'column__body--over' : ''}`}>
         <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {cards.map((card) => (
+          {cards.map((card, i) => (
             <CardTile
               key={card.id}
               card={card}
+              index={i}
               people={people}
               disabled={!canEdit}
               onOpen={onOpenCard}

@@ -33,7 +33,7 @@ function dueTone(dueDate) {
   return null;
 }
 
-export default function CardTile({ card, people, onOpen, disabled }) {
+export default function CardTile({ card, people, onOpen, disabled, index = 0 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: 'card', card },
@@ -59,7 +59,7 @@ export default function CardTile({ card, people, onOpen, disabled }) {
   return (
     <article
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Transform.toString(transform), transition, '--i': index }}
       className={`card ${isDragging ? 'card--dragging' : ''} ${card._pending ? 'card--pending' : ''}`}
       {...attributes}
       {...listeners}

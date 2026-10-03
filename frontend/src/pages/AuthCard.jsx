@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api } from '../lib/api.js';
+import { api, oauthPath } from '../lib/api.js';
 import { API_BASE } from '../lib/config.js';
 
 /**
@@ -42,7 +42,14 @@ export default function AuthCard({ mode, onSwitch }) {
     api
       .oauthProviders()
       .then((data) => {
-        if (!cancelled) setProviders(Array.isArray(data?.providers) ? data.providers : []);
+        if (!cancelled) {
+          // Filtered to the set the client knows how to start. A provider the
+          // client cannot build a path for would render a button that navigates
+          // nowhere, and an id interpolated into a URL is not trusted just
+          // because it came from our own API.
+          const rows = Array.isArray(data?.providers) ? data.providers : [];
+          setProviders(rows.filter((p) => p && oauthPath(p.id)));
+        }
       })
       .catch(() => {
         /* social sign-in is optional; the password form still works */
@@ -92,7 +99,9 @@ export default function AuthCard({ mode, onSwitch }) {
                   onClick={() => {
                     // A real navigation, not fetch: the provider has to own the
                     // top-level page so its own cookies and consent UI apply.
-                    window.location.assign(`${API_BASE}/auth/${p.id}`);
+                    const path = oauthPath(p.id);
+                    if (!path) return;
+                    window.location.assign(`${API_BASE}${path}`);
                   }}
                 >
                   {MARKS[p.id]}

@@ -86,11 +86,43 @@ export const api = {
 };
 
 /**
- * An avatar is either an absolute provider URL or a path this API serves
+ * An avatar is either an absolute https URL or a path this API serves
  * (`/users/:id/avatar`). Only the relative form needs the origin put back in
  * front of it — prepending blindly would turn a valid https URL into garbage.
+ *
+ * Both forms are matched rather than assumed. In production `API_BASE` is
+ * empty, so a value that did not match would otherwise be handed to `<img src>`
+ * verbatim, and `API_BASE + 'javascript:…'` is exactly how a scheme-bearing
+ * value slips through a prefix check. Anything that fails both patterns renders
+ * the initials fallback instead of a picture.
  */
 export function avatarSrc(src) {
-  if (!src) return '';
-  return /^https?:\/\//i.test(src) ? src : `${API_BASE}${src}`;
+  if (typeof src !== 'string' || !src) return '';
+  if (/^https:\/\//i.test(src) && !/[\s\\]/.test(src)) return src;
+  if (/^\/(?!\/)[^\s\\]*$/.test(src)) return `${API_BASE}${src}`;
+  return '';
+}
+
+/**
+ * A path this app is allowed to navigate to: root-relative, single leading
+ * slash, no whitespace and no backslash. Rejecting `//host` matters most — it
+ * is a protocol-relative URL, so `API_BASE + '//evil.com'` is a same-tab open
+ * redirect the moment the API base is empty. Used for the OAuth link callback
+ * the server hands back, which is the only redirect target we accept from a
+ * response body.
+ */
+export function ownPath(path) {
+  return typeof path === 'string' && /^\/(?!\/)[^\s\\]*$/.test(path) ? path : '';
+}
+
+const OAUTH_PROVIDERS = new Set(['google', 'github']);
+
+/**
+ * The start URL for a social sign-in. The id normally arrives from
+ * `/auth/providers`, but it is interpolated into a path that the browser
+ * navigates to, so it is matched against the known set rather than trusted —
+ * a value carrying `..`, a slash or a scheme cannot become a different URL.
+ */
+export function oauthPath(provider) {
+  return OAUTH_PROVIDERS.has(provider) ? `/auth/${provider}` : '';
 }

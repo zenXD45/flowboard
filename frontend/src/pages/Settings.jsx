@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../lib/api.js';
+import { api, ownPath } from '../lib/api.js';
 import { API_BASE } from '../lib/config.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { storeTheme, THEMES } from '../lib/theme.js';
@@ -93,7 +93,11 @@ export default function Settings({ onExit }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const note = (message, tone = 'info') => setNotice({ message, tone });
+  // A fresh id per notice so the element remounts when the message changes —
+  // otherwise React keeps the same <p> and the entrance never replays, which
+  // means a second save in a row shows no feedback at all.
+  const noticeSeq = useRef(0);
+  const note = (message, tone = 'info') => setNotice({ id: ++noticeSeq.current, message, tone });
 
   const saveProfile = async (e) => {
     e.preventDefault();
@@ -193,7 +197,15 @@ export default function Settings({ onExit }) {
   const connect = async (provider) => {
     try {
       const data = await api.linkProvider(provider);
-      window.location.href = `${API_BASE}${data.url}`;
+      // The server builds this path; we still confirm it is one of ours before
+      // handing it to the browser. `API_BASE` is empty in production, so a
+      // response body is otherwise the whole navigation target.
+      const path = ownPath(data?.url);
+      if (!path) {
+        note('The sign-in link could not be read. Try again.', 'error');
+        return;
+      }
+      window.location.href = `${API_BASE}${path}`;
     } catch (err) {
       note(err.message, 'error');
     }
@@ -235,7 +247,7 @@ export default function Settings({ onExit }) {
       </header>
 
       {notice && (
-        <p className={`settings__notice settings__notice--${notice.tone}`} role="status">
+        <p key={notice.id} className={`settings__notice settings__notice--${notice.tone}`} role="status">
           {notice.message}
         </p>
       )}
@@ -278,7 +290,11 @@ export default function Settings({ onExit }) {
         </div>
 
         <form className="settings__avatarurl" onSubmit={applyAvatarUrl}>
+          <label className="vh" htmlFor="avatar-url">
+            Avatar image URL
+          </label>
           <input
+            id="avatar-url"
             value={avatarUrl}
             placeholder="https://example.com/avatar.png"
             onChange={(e) => setAvatarUrl(e.target.value)}

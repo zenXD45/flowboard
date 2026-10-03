@@ -73,7 +73,11 @@ export default function Dashboard({ onOpen }) {
       </header>
 
       <form className="dash__new" onSubmit={create}>
+        <label className="vh" htmlFor="new-board">
+          Board title
+        </label>
         <input
+          id="new-board"
           value={title}
           placeholder="Name a new board…"
           maxLength={80}

@@ -178,10 +178,11 @@ export default function Board({ selfId }) {
         }}
       >
         <div className="board">
-          {board?.lists.map((list) => (
+          {board?.lists.map((list, index) => (
             <Column
               key={list.id}
               list={list}
+              index={index}
               cards={cardsByList(list.id)}
               people={people}
               canEdit={canEdit}
