@@ -1,0 +1,381 @@
+# FlowBoard — design notes
+
+Written to be defensible in an interview: not just what the app does, but why it
+works the way it does, what broke, and what I would change.
+
+---
+
+## 1. The core problem
+
+A collaborative board has one hard requirement that a CRUD app does not: **two
+people can act on the same object at the same time and neither should silently
+lose their work.**
+
+That single sentence decides most of the architecture. If two people both move
+the same card, one of them is going to be wrong. The design question is not
+"how do I prevent this" but "when it happens, who is right, and does the loser
+find out?"
+
+The answer here: **the server is always right, and the loser is told.** There is
+no merging of two conflicting moves, no last-write-wins that pretends both
+succeeded.
+
+---
+
+## 2. Data model
+
+```
+User     username (unique), passwordHash, avatar
+Board    title, description, ownerId, members[], lists[]   <- lists are embedded
+Card     boardId, listId, title, description, labels[], dueDate,
+         assigneeId, position (Number), version (Number)
+Comment  boardId, cardId, authorId, body
+Activity boardId, actorId, verb, targetType, targetId, meta
+```
+
+### Why lists are embedded but cards are not
+
+Lists belong to exactly one board, are always read with it, are bounded (30 per
+board), and are only ever reordered as a set. Embedding them means a rename or a
+reorder is a single-document write, and loading a board needs one query instead
+of two.
+
+Cards are bounded too (500 per list) but they are what people actually interact
+with, they are paginated in practice, and an embedded array that grows to
+thousands of sub-documents is a document-size problem. They get their own
+collection.
+
+The rule I applied: **embed what is always read together and bounded; separate
+what grows independently.**
+
+### Why `position` is a float
+
+Cards need an order. The obvious implementations are:
+
+| Approach | Insert cost | Failure mode |
+| --- | --- | --- |
+| Integer index, renumber on change | O(n) writes per insert | Two clients renumbering fight, and a failure mid-way leaves gaps |
+| LexoRank / fractional indexing | O(1) | Floating point eventually runs out of precision |
+| Timestamps | O(1) | Ties, and clock skew between clients |
+
+Fractional positioning sits between the first two. New cards get a gap of 1024.
+Dropping between `a` and `b` computes `(a + b) / 2`. Nothing else is touched, so
+a move is a single-card write no matter how many cards are in the list.
+
+The cost is precision, so there is a floor. `gapIsCollapsed()` detects when the
+interval between two neighbours has fallen below `1e-4` and the server renumbers
+that list before accepting the move. The alternative — letting positions decay
+into float noise — produces cards that sort in an order nobody chose.
+
+---
+
+## 3. Reads over REST, writes over WebSocket
+
+This split is the decision I would defend hardest.
+
+**Reads are HTTP** because they are cacheable, idempotent, and easy to reason
+about. Loading a board, listing your boards, and paging the activity log all
+happen once per view and never need to push to anyone else.
+
+**Writes are WebSocket** because a write is precisely the operation that has to
+reach every other open client. Once the socket exists — and it has to exist for
+presence anyway — routing mutations through HTTP and then broadcasting would mean
+maintaining two paths to the same authorization and validation code.
+
+The board snapshot (`GET /api/boards/:id`) deliberately carries cards **and**
+comments in two queries. Fetching comments per card would be N+1; the whole point
+is that opening a card shows its full history immediately instead of only what
+happened to arrive while the tab was open.
+
+### Every mutation is a command with an acknowledgement
+
+```js
+socket.emit('card:move', { boardId, cardId, listId, index, version }, (ack) => {
+  // ack: { status: 'ok', card } | { status: 'conflict', card } | { status: 'error', ... }
+});
+```
+
+The sender gets a direct reply; everyone else gets a broadcast. The sender's ack
+is authoritative, which is what makes optimistic updates safe to reconcile against.
+
+---
+
+## 4. Optimistic concurrency control
+
+Every card carries an integer `version`. Writes are compare-and-set:
+
+```js
+const result = await Card.updateOne(
+  { _id: cardId, boardId, version: expectedVersion },
+  { $set: { ...patch, updatedAt: new Date() }, $inc: { version: 1 } }
+);
+
+if (result.matchedCount === 0) {
+  // someone else got there first — send them the current state, not an error page
+  return { status: 'conflict', card: await Card.findById(cardId) };
+}
+```
+
+This is the same mechanism MongoDB uses internally for its own writes, so it is
+not exotic. What matters is the client contract:
+
+| Outcome | Client behaviour |
+| --- | --- |
+| `ok` | Replace the local card with the server's copy verbatim |
+| `conflict` | Snap to the server's copy, toast "someone else changed this first" |
+| `error` | Roll back to the exact pre-attempt state, keep the user's text in the field |
+
+The sender also receives the normal broadcast. That looks redundant, and it is —
+but it is what makes the sender's state converge on the same value as everyone
+else's instead of drifting.
+
+### What this does not cover
+
+Field-level merging. If A renames a card while B edits its description, B's whole
+update is rejected even though the fields do not overlap. A per-field version map
+would fix that, and for this app it would be over-engineering — the conflicts are
+rare and visible. I would add it if cards became documents people edited for hours
+rather than task cards touched in a moment.
+
+---
+
+## 5. Client-side reconciliation
+
+`BoardContext` holds cards in a plain object keyed by id, with a `_pending` flag.
+
+```js
+const before = cardsRef.current[cardId];
+setCards((prev) => ({ ...prev, [cardId]: { ...prev[cardId], ...patch, _pending: true } }));
+
+try {
+  const ack = await mutate('card:update', { boardId, cardId, patch, version: before.version });
+  setCards((prev) => ({ ...prev, [cardId]: { ...ack.card, _pending: false } }));
+} catch (err) {
+  // conflict carries the server's card; a plain rejection does not
+  const authoritative = err.card ?? before;
+  setCards((prev) => ({ ...prev, [cardId]: { ...authoritative, _pending: false } }));
+}
+```
+
+Three details that took more thought than the happy path:
+
+**The ref.** Socket listeners are registered once but need current data. Reading
+`cardsRef.current` instead of `cards` keeps the listeners stable, so a card move
+does not tear down and rebuild every subscription.
+
+**Rollback copies the whole previous object**, not just the patched fields. A
+partial rollback leaves stale fields behind, which is how you get a card whose
+title is from one edit and description from another.
+
+**The drop index excludes the dragged card.** `resolvePosition(..., excludeCardId)`
+on the server and `findPlacement` on the client both compute the destination
+against the list *with the dragged card removed*. Sending the same coordinate
+system to both ends is what stops a card from landing one slot off when it is
+dropped inside the list it came from.
+
+---
+
+## 6. Authorization
+
+Three roles: `owner`, `member`, `viewer`. Owner can manage members and delete the
+board; member can edit; viewer can only read.
+
+Two decisions here came from bugs:
+
+**Ownership lives in `Board.ownerId`, not as a role in `members`.** Promoting
+anyone to `owner` would create two users with manage rights while only one is the
+recorded owner — ambiguous about who may delete the board, and a way to strand
+the real owner. `member:role` accepts only `member` or `viewer` and rejects
+`owner` explicitly, with a message that says why rather than just "invalid role".
+The People UI reflects this: ownership is displayed, never offered as an option.
+
+**Every mutation re-reads access from MongoDB.** Not from `socket.data`, not from
+a cache refreshed on join. A socket authenticated at handshake keeps that
+authentication for its lifetime, so a user removed from a board mid-session would
+otherwise keep writing until they reconnected. Every mutation calls
+`loadAccess(boardId, userId, { need })`, which re-checks the role against the
+database. It is one indexed query per write — cheap, and it makes revocation
+immediate.
+
+A test drives exactly this: remove a member, then have their still-open socket try
+to write. It fails.
+
+---
+
+## 7. Presence
+
+Presence is derived from Socket.io room membership rather than stored:
+
+```js
+const sockets = await io.in(room(boardId)).fetchSockets();
+```
+
+No heartbeat table, nothing to clean up when a client vanishes. It is correct by
+construction because the room membership is maintained by the transport. The
+trade-off is that it costs a round trip per presence computation, which is why
+presence is emitted on join and disconnect rather than on a timer.
+
+With `REDIS_URL` set, the Redis adapter makes `fetchSockets` span every instance,
+so presence and broadcasts work across a horizontally scaled deployment. Without
+it, a single instance works and a second instance would show two disjoint rooms —
+which is the honest reason the adapter is documented as required for scaling
+rather than optional.
+
+---
+
+## 8. Security
+
+- bcrypt for passwords; the hash is never returned by any endpoint
+- JWT verified in the Socket.io handshake, so an unauthenticated socket never
+  reaches a listener
+- Helmet, a strict CORS allowlist, and a 64 KB body limit
+- Rate limiting on auth endpoints
+- Every input goes through a shared validator that returns a field-level error
+  rather than being coerced
+- Boards are only reachable by members; there is no public link, so there is no
+  guessable-id surface
+
+`socket.data.userId` is set from the **verified token**, never from the
+handshake payload:
+
+```js
+socket.data.userId = payload.sub;
+```
+
+That one line is the difference between "the socket knows who it is" and "the
+socket knows who someone claimed it was."
+
+---
+
+## 9. Tests
+
+```
+56  node:test suites      unit + integration, isolated database per file
+30  smoke.js              live API, real sockets, real HTTP
+13  browser-test.js       two Chrome contexts, synthetic pointer drags
+```
+
+Test databases are isolated per file — each suite generates a unique database
+name. Running the files concurrently against one shared database produced
+failures that looked like application bugs and were not; the isolation is what
+made concurrent runs viable.
+
+The browser test is the one that found real bugs. It signs up two users in
+separate browser contexts, so they have genuinely separate `localStorage` and
+separate sockets — not two tabs sharing a session, which would hide presence and
+authorization problems. It then drives an actual drag with `page.mouse` through a
+series of intermediate moves, because dnd-kit's `PointerSensor` has an activation
+threshold and a single teleporting `mouse.move` will not claim the drag.
+
+Three bugs came out of writing it:
+
+1. **`emit()` raced the handshake.** The first mutation of a session almost always
+   landed before `connected` flipped, so "create my first board" intermittently
+   reported the user as offline. `emit()` now awaits the connection instead of
+   failing immediately.
+2. **Comments were write-only.** They were inserted into Mongo and broadcast, but
+   nothing ever read them back, so a refresh silently emptied every thread. Fixed
+   by including comments in the board snapshot — and covered by a regression check
+   in `smoke.js`.
+3. **The board snapshot omitted its own id.** `publicMember()` returned title,
+   owner and lists but not `id`, so any mutation that sent `boardId: board.id` was
+   rejected with "Invalid board id". The browser test surfaced it as a comment that
+   silently refused to post; the error was being swallowed by an empty `catch`.
+
+That third one is the argument for the browser test existing. The unit tests all
+passed. The comment was being written, the broadcast fired, the activity log
+recorded it — the only symptom was a textarea that silently refilled itself.
+
+---
+
+## 10. Trade-offs I would revisit
+
+**No offline support.** An optimistic UI is halfway to an offline-first one, and
+this app stops at halfway: it renders optimistically but has no queue, so a move
+made on a dead connection is lost rather than deferred.
+
+**No reordering of lists by drag.** Cards drag; lists are renamed and deleted but
+not dragged. The embedded-list design makes it possible; it just is not built.
+
+**Activity log grows forever.** It is paginated on read but never trimmed. A real
+deployment would want a TTL or a retention window.
+
+**Free-tier hosting is not production hosting.** See below.
+
+---
+
+## 11. Deployment
+
+### API — Render
+
+`render.yaml` at the repo root declares a free web service:
+
+- `buildCommand: npm ci --prefix backend`
+- `startCommand: npm start --prefix backend`
+- `healthCheckPath: /health`
+- `JWT_SECRET` uses `generateValue: true` so Render creates it
+
+Environment variables to set:
+
+| Variable | Source |
+| --- | --- |
+| `MONGODB_URL` | MongoDB Atlas M0 — free, 512 MB, shared |
+| `JWT_SECRET` | Generated by Render |
+| `FRONTEND_URL` | Your Vercel URL, for the CORS allowlist |
+| `REDIS_URL` | Optional, only for multiple instances |
+
+### Database — MongoDB Atlas M0
+
+Free forever at 512 MB. Adequate for a portfolio project, and far more than this
+needs. The connection string goes in `MONGODB_URL` with the database name appended.
+Atlas requires IP allowlisting or `0.0.0.0/0` for Render's dynamic egress IP —
+the latter is fine for a demo, and worth calling out as the thing to fix first if
+this were real.
+
+### Frontend — Vercel
+
+`frontend/vercel.json` sets the framework preset and build command. The client
+reads `VITE_API_URL` at build time, so the API URL is baked into the bundle — set
+it in Vercel's environment variables.
+
+### The free-tier reality
+
+- The API sleeps after 15 minutes idle and cold-starts in roughly 50 seconds. The
+  client pings every 25 seconds while a board is open, which keeps the connection
+  healthy and holds the instance awake — but the first load after a sleep is slow.
+- One instance only on the free plan. A second would need `REDIS_URL` for the
+  adapter, and it would need to be a paid instance.
+- Atlas M0 has no backups. Fine for a demo; not fine for anything else.
+
+I would rather state these plainly than let a reviewer discover them.
+
+---
+
+## 12. Interview questions this project answers
+
+- **How do you handle two people editing the same thing?**
+  Integer version per card, compare-and-set on write, server returns the
+  authoritative copy on conflict, client reconciles instead of guessing.
+  See `sockets/mutations.js` and the `conflict` branch in `BoardContext`.
+
+- **Why WebSocket for writes and HTTP for reads?**
+  Because the socket already exists for presence, and a write is the only
+  operation that must reach other clients. Reads are cacheable and idempotent;
+  pushing them over a socket would buy nothing.
+
+- **How do you order cards without renumbering everything?**
+  Fractional positions. A gap of 1024, midpoint insertion, and a floor that
+  triggers renumbering before precision runs out.
+
+- **How do you know who is allowed to do this, right now?**
+  Every mutation re-reads the role from the database rather than trusting the
+  session, so revoking access takes effect immediately.
+
+- **What would break first at scale?**
+  Presence. It is one `fetchSockets` per change; at high connection counts that
+  becomes the bottleneck before anything else does.
+
+- **What is the worst bug you shipped?**
+  Comments that saved correctly and were never read back. Every layer reported
+  success. It took a test that reloaded the page to find, which is now a permanent
+  regression check.

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: flowboard-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci --prefix backend
+    startCommand: npm start --prefix backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
