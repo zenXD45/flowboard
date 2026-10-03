@@ -7,6 +7,7 @@ import config from './config/index.js';
 import { createApp } from './app.js';
 import initSockets from './sockets/index.js';
 import { startKeepAlive } from './utils/keepalive.js';
+import { redactMongoUrl } from './utils/redact.js';
 
 /**
  * Without Redis every Socket.io instance keeps its own room registry, so a
@@ -32,12 +33,14 @@ async function attachAdapter(io) {
 async function main() {
   mongoose.set('strictQuery', true);
   await mongoose.connect(config.mongoUrl, { serverSelectionTimeoutMS: 4000 });
-  console.log(`[db] connected ${config.mongoUrl}`);
+  // The password must never reach the logs — Render keeps them in a dashboard
+  // and mirrors them to anywhere the service is configured to ship them.
+  console.log(`[db] connected ${redactMongoUrl(config.mongoUrl)}`);
 
   const app = createApp();
   const server = createServer(app);
   const io = new Server(server, {
-    cors: { origin: config.frontendUrl, methods: ['GET', 'POST'] },
+    cors: { origin: config.frontendOrigins, methods: ['GET', 'POST'] },
     maxHttpBufferSize: 40_960,
     pingInterval: 25_000,
     pingTimeout: 20_000

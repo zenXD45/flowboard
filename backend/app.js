@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 import config from './config/index.js';
+import { isOriginAllowed, isSelfOrigin } from './utils/origins.js';
 import { requireAuth } from './middleware/auth.js';
 import * as auth from './controllers/auth.controller.js';
 import * as boards from './controllers/boards.controller.js';
@@ -30,14 +31,27 @@ export function createApp(overrides = {}) {
   };
   app.use(helmet({ contentSecurityPolicy: { directives: cspDirectives } }));
 
+  const corsMethods = ['GET', 'POST', 'PATCH', 'OPTIONS'];
+  const corsHeaders = ['Content-Type', 'Authorization'];
+
   app.use(
-    cors({
-      origin(origin, callback) {
-        if (!origin || origin === cfg.frontendUrl) return callback(null, true);
-        return callback(null, false);
-      },
-      methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+    cors((req, callback) => {
+      const origin = req.headers.origin;
+      const allowed =
+        !origin ||
+        isSelfOrigin(origin, req.headers.host) ||
+        isOriginAllowed(cfg.frontendOrigins, origin);
+
+      if (!allowed) {
+        // Without this the only clue is a browser console message the operator
+        // has to go and find, naming a header but not the allowlist that
+        // rejected it. The server already knows both, so say so here.
+        console.warn(
+          `[cors] rejected origin "${origin}" — FRONTEND_URL allows: ${cfg.frontendOrigins.join(', ') || '(nothing)'}`
+        );
+      }
+
+      callback(null, { origin: allowed, methods: corsMethods, allowedHeaders: corsHeaders });
     })
   );
 
@@ -77,7 +91,10 @@ export function createApp(overrides = {}) {
       ok: true,
       uptime: process.uptime(),
       version: 'flowboard/1.0.0',
-      adapter: app.get('io')?.adapter?.name || 'in-memory'
+      // Derived from config, not from `io.adapter.name`: Socket.io's in-memory
+      // adapter reports the literal string "adapter", which made the old
+      // `|| 'in-memory'` fallback unreachable and the field meaningless.
+      adapter: cfg.redisUrl ? 'redis' : 'memory'
     })
   );
 

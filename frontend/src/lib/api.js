@@ -17,15 +17,28 @@ export function tokenPresent() {
 
 async function request(path, { method = 'GET', body, headers = {} } = {}) {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+  } catch {
+    // A blocked cross-origin response never reaches fetch, so it surfaces as a
+    // bare "Failed to fetch" that names neither the server nor the cause. Say
+    // which server, so the message points at the thing that is actually wrong.
+    throw new Error(
+      API_BASE
+        ? `Could not reach ${API_BASE}. Check your connection and try again.`
+        : 'The API address is not configured. Set VITE_API_URL and rebuild.'
+    );
+  }
 
   let data = null;
   try {

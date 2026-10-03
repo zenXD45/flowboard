@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseOriginAllowlist } from '../utils/origins.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -23,6 +24,9 @@ const config = {
   port,
   mongoUrl: readEnv('MONGODB_URL', 'mongodb://127.0.0.1:27017/flowboard'),
   frontendUrl: readEnv('FRONTEND_URL', 'http://localhost:5173'),
+  // The same value, normalised and split, so both the HTTP layer and the
+  // Socket.io handshake enforce one list instead of two that can drift.
+  frontendOrigins: parseOriginAllowlist(readEnv('FRONTEND_URL', 'http://localhost:5173')),
   redisUrl: readEnv('REDIS_URL'),
   // Render's free tier sleeps after ~15 idle minutes. Production pings its own
   // /health endpoint to stay warm; development and tests never do.
