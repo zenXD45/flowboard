@@ -202,6 +202,56 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Board loading skeleton. Each block is a placeholder of the real thing, sized
+   from the same radius and column width the board uses. The shimmer is a
+   transform on a pseudo-element rather than a background-position animation,
+   so it stays on the compositor and does not repaint the column behind it. */
+.skel { display: flex; gap: 12px; width: 100%; padding: 0 20px; }
+
+.skel__col {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 276px;
+  flex-shrink: 0;
+  padding: 11px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-3);
+  background: var(--surface-col);
+}
+
+.skel__bar,
+.skel__card {
+  display: block;
+  border-radius: var(--r-2);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 45%,
+    var(--surface-2) 90%
+  );
+  background-size: 220% 100%;
+  animation: skel-sweep 1.4s var(--ease) infinite;
+}
+.skel__bar { height: 13px; margin-bottom: 4px; }
+.skel__card { height: 62px; }
+.skel__card--short { height: 44px; }
+
+@keyframes skel-sweep {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+.skel__note { margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+
+/* The skeleton mirrors the board's own mobile rule — same column width, same
+   horizontal overflow — so the swap from skeleton to real columns does not
+   reflow anything under the user's thumb. */
+@media (max-width: 460px) {
+  .skel { padding: 0 14px; overflow-x: auto; }
+  .skel__col { width: min(276px, 82vw); }
+}
+
 /* ------------------------------------------------------------ form controls */
 
 .btn {
@@ -251,13 +301,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
-    color var(--t-fast) var(--ease);
+    color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .ghostbtn:hover {
   background: var(--surface-2);
   border-color: var(--line-strong);
   color: var(--ink);
 }
+.ghostbtn:active { transform: scale(0.97); }
 
 /* Always visible — a hover-only control is unreachable by keyboard and touch. */
 .iconbtn {
@@ -271,9 +322,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
 }
 .iconbtn:hover { background: var(--surface-3); color: var(--ink); }
+.iconbtn:active { transform: scale(0.94); }
 
 input, textarea, select {
   width: 100%;
@@ -474,7 +527,19 @@ label input, label textarea { margin-top: 5px; }
 
 /* ------------------------------------------------------------------ board */
 
-.board-shell { display: flex; flex-direction: column; height: 100%; }
+/* `100dvh`, not `100%`. The board is a full-height app shell, and on Android
+   the viewport grows and shrinks as the URL bar collapses and expands. A `100%`
+   or `100vh` shell is pinned to the *largest* viewport, so the bottom of the
+   board ends up underneath the browser chrome and the page scrolls when it
+   should not. `dvh` tracks the visible viewport exactly. */
+.board-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  /* Room for a notch, a camera cutout, and the Android gesture bar. Without
+     this the last column's composer sits under the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 
 .topbar {
   display: flex;
@@ -526,21 +591,54 @@ label input, label textarea { margin-top: 5px; }
 }
 .avatar img { display: block; border-radius: 50%; object-fit: cover; }
 
+/* The board is a horizontally paged surface. Three things have to be true for
+   it to feel native under a thumb, and each one was a bug before:
+
+   1. overscroll-behavior-x: contain — without it, a flick that reaches the end
+      of the columns is claimed by Chrome as an overscroll *navigation*, and it
+      fires a history Back. On a Pixel 7 viewport that reliably threw the user
+      off the board mid-gesture and destroyed their place. `contain` keeps the
+      leftover scroll inside the board.
+   2. scroll-snap — a card left half a column past the viewport edge reads as a
+      rendering fault. Snapping makes each swipe resolve to exactly one column.
+   3. touch-action: pan-x — the board pans horizontally; the columns inside it
+      pan vertically. Stating it stops the browser guessing, and `manipulation`
+      on the cards removes the 300ms double-tap-zoom delay without disabling
+      the drag, which is handled by a long-press sensor rather than by
+      cancelling the gesture. */
 .board {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   flex: 1;
+  min-height: 0;
   padding: 16px 20px 24px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
   scroll-padding: 20px;
+  scroll-snap-type: x proximity;
+  /* Deliberately NOT `touch-action: pan-x`. It is tempting to declare the
+     board's axis so the browser "stops guessing", but `pan-x` also forbids
+     vertical panning, and the columns are scroll containers inside this one --
+     so any touch that began on a card was unable to scroll its own column.
+     Measured: a swipe up inside a column moved nothing while the same swipe
+     over the composer worked. `auto` lets the browser resolve the gesture
+     against the actual scroller under the finger, which is the correct
+     behaviour and the reason the cards only need `manipulation`. */
 }
 
 .column {
   display: flex;
   flex-direction: column;
   width: 276px;
+  /* Cap the column so a long list scrolls inside it instead of turning the
+     whole board into one long page. Without a bounded height the "add card"
+     composer at the bottom of a 40-card list is a full screen of scrolling
+     away on a phone. */
+  max-height: 100%;
   flex-shrink: 0;
+  scroll-snap-align: start;
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
   background: var(--surface-col);
@@ -564,9 +662,10 @@ label input, label textarea { margin-top: 5px; }
   font-weight: 620;
   text-align: left;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .column__title:hover { background: var(--surface-2); }
+.column__title:active { transform: scale(0.98); }
 .column__count {
   padding: 0 3px;
   color: var(--ink-3);
@@ -579,8 +678,31 @@ label input, label textarea { margin-top: 5px; }
   display: flex;
   flex-direction: column;
   gap: 7px;
+  /* 1 1 auto: takes its natural height but gives up space first when the column
+     hits its cap, which is what makes the scroll below engage. The 72px floor
+     keeps a near-empty column from collapsing to a sliver. */
+  flex: 1 1 auto;
   min-height: 72px;
   padding: 9px;
+  overflow-y: auto;
+  /* `clip`, not the default, and this one line is load-bearing.
+     `overflow-y: auto` alone does not leave the x axis alone: CSS coerces a
+     `visible` axis to `auto` whenever the other axis is scrollable, so the
+     computed value here was `overflow-x: auto`. That quietly turned every
+     column into a *horizontal* scroll container, and a scroll container claims
+     the pan even when it has nothing to scroll (measured: scrollWidth ==
+     clientWidth). The visible result was that swiping a card sideways — the one
+     place a thumb actually rests — panned nothing, while swiping the column
+     header, the gap, or the board padding panned fine. `hidden` does not fix
+     it because it also creates a scroll container; only `clip` clips without
+     scrolling. Unsupported browsers fall back to the old behaviour rather than
+     breaking. */
+  overflow-x: clip;
+  /* Chained to the board: a flick that reaches the end of a column's scroll
+     hands off to the board instead of pulling the page down into
+     pull-to-refresh, which on Android reloads and loses the board. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border-radius: 0 0 var(--r-3) var(--r-3);
   outline: 1.5px dashed transparent;
   outline-offset: -3px;
@@ -589,6 +711,41 @@ label input, label textarea { margin-top: 5px; }
 .column__body--over { background: var(--accent-wash); outline-color: var(--accent-text); }
 
 .column__empty { margin: 8px 2px; color: var(--ink-3); font-size: 12.5px; }
+
+/* An empty column is the state every new board starts in, so it doubles as the
+   invitation: it names the drop target and offers the control that fills it. */
+.column__blank {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin: 2px 0 4px;
+  padding: 12px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-2);
+}
+.column__blank-text { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+.column__blank-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 540;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.column__blank-cta:hover { background: var(--surface-2); color: var(--ink); }
+.column__blank-cta:active { transform: scale(0.97); }
+
+/* The armed state of a destructive action, inline in the column header. */
+.column__confirm { display: inline-flex; align-items: center; gap: 4px; }
+.btn--tiny { min-height: 28px; padding: 3px 9px; font-size: 12.5px; }
 
 .column__add {
   display: flex;
@@ -603,9 +760,11 @@ label input, label textarea { margin-top: 5px; }
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
 }
 .column__add:hover { background: var(--surface-2); color: var(--ink); }
+.column__add:active { transform: scale(0.985); }
 
 .composer { font-size: 13.5px; }
 
@@ -622,9 +781,10 @@ label input, label textarea { margin-top: 5px; }
   white-space: nowrap;
   cursor: pointer;
   transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
-    background var(--t-fast) var(--ease);
+    background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .addlist:hover { border-color: var(--accent-text); background: var(--accent-wash); color: var(--accent-text); }
+.addlist:active { transform: scale(0.98); }
 
 /* -------------------------------------------------------------------- card */
 
@@ -635,10 +795,19 @@ label input, label textarea { margin-top: 5px; }
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
   cursor: grab;
+  /* `manipulation` removes the browser's 300ms double-tap-zoom wait without
+     cancelling the gesture, so a long-press still reaches the drag sensor while
+     a plain tap stays a tap. `none` would have killed card scrolling outright. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
-    opacity var(--t-fast) var(--ease);
+    opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
+/* A press has to be felt, not just seen. The card is also the board's main tap
+   target, so on touch this is the only signal that a finger landed before the
+   sheet animates in. */
+.card:active { transform: scale(0.985); border-color: var(--accent-line); }
 .card:active { cursor: grabbing; }
 .card--dragging { opacity: 0.32; }
 .card--overlay {
@@ -724,6 +893,11 @@ label input, label textarea { margin-top: 5px; }
   background: var(--surface-1);
   box-shadow: var(--shadow-3);
   animation: slide-in var(--t-slow) var(--ease);
+  /* Keep the sheet's own scroll clear of the notch and the Android gesture bar.
+     A fixed overlay ignores the document's safe-area padding, so it has to
+     reserve the space itself or the last comment sits under the home bar. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .sheet--narrow { width: min(400px, 96vw); }
 
@@ -827,23 +1001,72 @@ label input, label textarea { margin-top: 5px; }
   background: none;
   color: var(--ink-3);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
 }
 .toast__x:hover { background: var(--surface-2); color: var(--ink); }
+.toast__x:active { transform: scale(0.92); }
 
 /* ------------------------------------------------------------- responsive */
 
+/* Touch targets, sized for thumbs only.
+   Measured on a Pixel 7 and a 360px budget Android: 28px icon buttons, 26px
+   column titles, 32px ghost buttons and a 24px toast dismiss — every one of them
+   below the 44px minimum, and the 28px trash button sat directly beside a card
+   that opens a sheet. Dense 28px controls are correct on a pointer device,
+   where the cursor provides precision, so this is scoped to `pointer: coarse`
+   rather than to a width: a large desktop window with a touchscreen keeps its
+   density, and a narrow phone gets real targets. */
+@media (pointer: coarse) {
+  .iconbtn { width: 44px; height: 44px; }
+  .ghostbtn { min-height: 44px; padding: 8px 14px; }
+  .btn { min-height: 44px; }
+  /* The header is already 44px tall because the trash button beside it is, so
+     growing the title to match costs the column no vertical space. */
+  .column__title { min-height: 44px; }
+  /* A card is the app's main touch target -- tapping one is the only way to
+     reach its description, labels, due date and comments -- and 39px was the
+     shortest of the three remaining offenders. */
+  .card { min-height: 44px; }
+  .column__add { min-height: 44px; }
+  .column__blank-cta { min-height: 44px; }
+  .toast__x { width: 44px; height: 44px; }
+  .addlist { min-height: 44px; }
+  input, textarea, select { min-height: 44px; font-size: 16px; }
+  /* 16px is not cosmetic: anything smaller makes iOS Safari zoom the viewport
+     on focus, which then leaves the sheet scrolled sideways. */
+}
+
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; padding: 10px 14px; }
+  .topbar { flex-wrap: wrap; padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top, 0px)); }
   .topbar__left { flex: 1 1 100%; }
   .topbar__right { flex: 1 1 100%; flex-wrap: wrap; }
-  .board { padding: 12px 14px 20px; }
+
+  /* A fixed 276px column on a 360px screen leaves 84px of dead space and no
+     hint that another column exists. Sizing to the viewport keeps the snap
+     points predictable and shows a sliver of the next column. */
+  .board {
+    padding: 12px 14px 20px;
+    scroll-padding: 14px;
+    gap: 10px;
+  }
+  .column { width: min(276px, 82vw); }
+
   .dash { padding: 28px 16px 64px; }
   .dash__new { flex-wrap: wrap; }
   .dash__new .btn { width: 100%; }
-  .sheet, .sheet--narrow { width: 100vw; border-left: none; }
+  .sheet, .sheet--narrow { width: 100%; border-left: none; }
   .meta { grid-template-columns: 72px 1fr; }
 }
+
+/* Deliberately no vertical-stack fallback below this point.
+
+   Stacking the columns on a narrow phone was tried and reverted. It makes each
+   list more legible, but it is the wrong trade for this product: the whole point
+   of a board is moving a card sideways into the next list, and a stacked layout
+   turns that gesture into a long scroll while hiding the neighbouring column
+   that says where the card can go. Horizontal paging with snap is what Trello
+   and Notion do on a phone, and it keeps one layout mode to reason about. */
 
 /* ---------------------------------------------------------- reduced motion */
 

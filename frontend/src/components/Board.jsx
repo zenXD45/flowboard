@@ -1,5 +1,15 @@
 import { useCallback, useState } from 'react';
-import { DndContext, closestCorners, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import {
+  DndContext,
+  closestCorners,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import Column from './Column.jsx';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
@@ -52,9 +62,35 @@ export default function Board({ selfId }) {
   const [dragging, setDragging] = useState(null);
   const [panel, setPanel] = useState(null);
 
-  // A small activation distance keeps a click on a card from starting a drag,
-  // which otherwise swallows the double-click that opens the card.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  /**
+   * Three sensors, because one gesture has to mean two different things
+   * depending on what is under the finger.
+   *
+   * A single PointerSensor cannot do this. On touch it competes with the
+   * browser's own panning: either the drag eats the scroll (the column becomes
+   * unscrollable) or the scroll cancels the drag (cards cannot be moved at
+   * all). Measured on a Pixel 7 viewport, both were true — a horizontal drag
+   * moved nothing, scrolled the board, and at the scroll boundary Chrome
+   * treated the leftover gesture as an overscroll and fired a history Back,
+   * ejecting the user off the board entirely.
+   *
+   * So the two inputs are separated:
+   *
+   *   mouse    6px of travel starts a drag, so a click is still a click
+   *   touch    200ms hold starts a drag, so a flick still scrolls and a tap
+   *            still opens the card — the gesture is only claimed once the
+   *            user has clearly held still to say "I mean to move this"
+   *   keyboard space lifts, arrows move, space drops (sortable coordinates)
+   *
+   * Keyboard dragging was previously claimed in the design notes but never
+   * actually wired up: there was no KeyboardSensor, so a keyboard user could
+   * open a card with Enter but could not move one.
+   */
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   /**
    * The drop index is always computed against the list *with the dragged card

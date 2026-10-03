@@ -8,6 +8,7 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [title, setTitle] = useState(list.title);
   const inputRef = useRef(null);
 
@@ -28,6 +29,19 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
     setRenaming(false);
     setTitle(list.title);
     if (value && value !== list.title) onRename(list.id, value);
+  };
+
+  // Deleting a list destroys every card in it. One tap used to be enough,
+  // which is survivable when you can hover the button and read its title, and
+  // reckless on a phone where there is no hover and a mis-tap is one thumb
+  // away. Two taps, and the second one says what it destroys.
+  const requestDelete = () => {
+    if (confirmingDelete) {
+      setConfirmingDelete(false);
+      onDelete(list.id);
+      return;
+    }
+    setConfirmingDelete(true);
   };
 
   return (
@@ -61,17 +75,42 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
           </button>
         )}
         <span className="column__count">{cards.length}</span>
-        {canEdit && (
-          <button
-            type="button"
-            className="iconbtn"
-            onClick={() => onDelete(list.id)}
-            title="Delete list and its cards"
-            aria-label={`Delete list ${list.title}`}
-          >
-            <Icon name="trash" size={14} />
-          </button>
-        )}
+        {canEdit &&
+          (confirmingDelete ? (
+            <span className="column__confirm">
+              <button
+                type="button"
+                className="btn btn--danger btn--tiny"
+                onClick={requestDelete}
+                // Escape and a click elsewhere both back out, so the armed
+                // state can never be left hanging over the board.
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setConfirmingDelete(false);
+                }}
+              >
+                {cards.length > 0 ? `Delete list + ${cards.length} card${cards.length === 1 ? '' : 's'}` : 'Delete list'}
+              </button>
+              <button
+                type="button"
+                className="iconbtn"
+                onClick={() => setConfirmingDelete(false)}
+                aria-label="Keep list"
+                title="Keep this list"
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="iconbtn"
+              onClick={requestDelete}
+              title="Delete list and its cards"
+              aria-label={`Delete list ${list.title}`}
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          ))}
       </header>
 
       <div ref={setNodeRef} className={`column__body ${isOver ? 'column__body--over' : ''}`}>
@@ -87,7 +126,23 @@ export default function Column({ list, cards, people, canEdit, onOpenCard, onCre
           ))}
         </SortableContext>
 
-        {cards.length === 0 && !adding && <p className="column__empty">Nothing here yet</p>}
+        {cards.length === 0 && !adding && (
+          // An empty column is the most common state a new board is in, so it
+          // gets a real affordance rather than a placeholder sentence: it says
+          // what belongs here and offers the exact control that adds it.
+          <div className="column__blank">
+            {canEdit ? (
+              <>
+                <p className="column__blank-text">Drop a card here</p>
+                <button type="button" className="column__blank-cta" onClick={() => setAdding(true)}>
+                  <Icon name="plus" size={13} /> Add a card
+                </button>
+              </>
+            ) : (
+              <p className="column__blank-text">Nothing here yet</p>
+            )}
+          </div>
+        )}
 
         {adding ? (
           <textarea

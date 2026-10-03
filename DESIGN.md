@@ -247,12 +247,78 @@ socket knows who someone claimed it was."
 
 ---
 
-## 9. Tests
+## 9. Touch, and the two CSS bugs that hid there
+
+The desktop build passed its browser test and was still broken on a phone, in
+two ways that only a real touch emulation found.
+
+**Cards could not be opened at all.** A card opened on `onDoubleClick`. A
+touchscreen cannot produce a double tap without a 300ms delay penalty and no
+visual affordance, so on Android a card was decoration — no description, no
+comments, no due date. It is now a single click, which raised the opposite
+risk: a drag ends with the pointer released over the card, so the browser fires
+a click afterwards and every completed drag would fling the sheet open. dnd-kit
+suppresses that click when it recognised the drag, and the browser test now
+asserts both halves — a drag does not open the sheet, and a click does.
+
+**A swipe that reached the end of the board navigated back to the dashboard.**
+The board is a horizontal scroller, and Chrome treats an overscroll past its
+edge as a history navigation. Mid-gesture, the user was thrown out of the board
+and lost their place. `overscroll-behavior-x: contain` on the board keeps the
+leftover scroll inside the board. This one is worth remembering as a class of
+bug: nothing in the CSS was *wrong*, the browser was simply claiming a gesture
+the app had not thought about.
+
+The subtler of the two was this. `.column__body` set `overflow-y: auto` and
+left the x axis alone, and the fix was not "leave the x axis alone":
+
+```css
+/* `overflow-y: auto` does not leave `overflow-x: visible` alone. CSS coerces
+   a visible axis to `auto` whenever the other axis is scrollable. */
+.column__body { overflow-y: auto; overflow-x: visible; }
+/* computed: overflow-x: auto — every column became a horizontal scroller */
+```
+
+So every column quietly became a scroll container in both axes, and a scroll
+container claims a pan even when it has nothing to scroll — `scrollWidth` equalled
+`clientWidth` in all of them. The visible symptom was that the board could only
+be panned by swiping the column header, the gap between columns, or the board
+padding, and *never* by swiping a card, which is the only place a thumb rests.
+`overflow-x: hidden` does not fix it, because `hidden` also creates a scroll
+container. Only `clip` clips without scrolling.
+
+Two more things that turned out to matter on a phone:
+
+- `height: 100dvh`, not `100%` or `100vh`. The board is a full-height shell, and
+  on Android the viewport changes height as the URL bar collapses. A shell pinned
+  to the largest viewport puts its composer under the browser chrome.
+- `touch-action: pan-x` on the board looked like a way to stop the browser
+  guessing which scroller gets a gesture. It is the opposite of a hint — it
+  *forbids* vertical panning, and because `touch-action` intersects up the whole
+  ancestor chain, a touch that began on a card could no longer scroll its own
+  column. The board is left at `auto` so the browser resolves the gesture
+  against whatever scroller is actually under the finger.
+
+Touch targets are sized by `@media (pointer: coarse)`, not by viewport width. A
+28px icon button is wrong under a thumb and correct under a cursor, and a large
+desktop window with a touchscreen should keep its density.
+
+The gestures are split by intent rather than unified into one sensor. Mouse
+drags at a 6px threshold; touch drags only after a 200ms hold, so a tap still
+opens a card and a swipe still pans the board. That is also why `npm run android` (`scripts/android-audit.js`)
+exists: it drives a real Pixel 7 and a 360px budget Android, and asserts the
+gestures a desktop mouse cannot make. Both of the bugs above were invisible to
+the desktop suite and obvious within a minute of emulation.
+
+---
+
+## 10. Tests
 
 ```
 56  node:test suites      unit + integration, isolated database per file
 30  smoke.js              live API, real sockets, real HTTP
-13  browser-test.js       two Chrome contexts, synthetic pointer drags
+16  browser-test.js       two Chrome contexts, synthetic pointer drags
+   android audit          Pixel 7 + 360px Android, real touch gestures
 ```
 
 Test databases are isolated per file — each suite generates a unique database
@@ -288,7 +354,7 @@ recorded it — the only symptom was a textarea that silently refilled itself.
 
 ---
 
-## 10. Trade-offs I would revisit
+## 11. Trade-offs I would revisit
 
 **No offline support.** An optimistic UI is halfway to an offline-first one, and
 this app stops at halfway: it renders optimistically but has no queue, so a move
@@ -304,7 +370,7 @@ deployment would want a TTL or a retention window.
 
 ---
 
-## 11. Deployment
+## 12. Deployment
 
 ### API — Render
 
@@ -351,7 +417,7 @@ I would rather state these plainly than let a reviewer discover them.
 
 ---
 
-## 12. Interview questions this project answers
+## 13. Interview questions this project answers
 
 - **How do you handle two people editing the same thing?**
   Integer version per card, compare-and-set on write, server returns the

@@ -43,6 +43,19 @@ export default function CardTile({ card, people, onOpen, disabled }) {
   const assignee = card.assigneeId ? people[card.assigneeId] : null;
   const tone = dueTone(card.dueDate);
 
+  /**
+   * Opened on click, not double-click.
+   *
+   * Double-click is a mouse-only gesture: there is no such thing on a
+   * touchscreen, so on a phone this card had no way in at all — every card's
+   * description, labels, due date, assignee and comment thread were unreachable.
+   *
+   * Click is correct for all three inputs. The drag cannot eat it because the
+   * touch sensor now needs a 200ms hold and the mouse sensor needs 6px of
+   * travel, so a stationary press never becomes a drag; and dnd-kit swallows
+   * the synthetic click that follows a real drag, so dropping a card does not
+   * also open it.
+   */
   return (
     <article
       ref={setNodeRef}
@@ -50,12 +63,18 @@ export default function CardTile({ card, people, onOpen, disabled }) {
       className={`card ${isDragging ? 'card--dragging' : ''} ${card._pending ? 'card--pending' : ''}`}
       {...attributes}
       {...listeners}
-      onDoubleClick={() => onOpen(card)}
+      onClick={() => onOpen(card)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onOpen(card);
+        // Enter and Space are both expected on a focusable card; Space is also
+        // the keyboard drag key, so it must not double as "open" or lifting a
+        // card with the keyboard would immediately open it.
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onOpen(card);
+        }
       }}
       tabIndex={0}
-      aria-label={card.title}
+      aria-label={`${card.title}. Open card`}
     >
       {card.labels.length > 0 && (
         <div className="card__labels">

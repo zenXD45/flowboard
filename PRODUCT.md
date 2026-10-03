@@ -16,8 +16,8 @@ budget to work together in real time.
 
 ## What it does
 
-Sign up with a username and password. Create a board, invite a collaborator by
-username, and work on it together. Cards have a title, description, labels, a due
+Sign up with a username and password, or with Google or GitHub. Create a board,
+invite a collaborator by username, and work on it together. Cards have a title, description, labels, a due
 date, an assignee, comments, and a place on the board. The board shows who else is
 looking at it right now and what changed while you were away.
 
@@ -25,7 +25,7 @@ looking at it right now and what changed while you were away.
 
 | Not doing | Why |
 | --- | --- |
-| Accounts with email verification | Nothing in the app needs to prove identity; it would add a whole signup-abandonment problem for no gain |
+| Accounts with email verification of their own | Nothing in the app needs to prove identity; it would add a whole signup-abandonment problem for no gain. Note this is about *verifying* an address we hold — a Google or GitHub sign-in still only links to an existing account when that provider asserts the address is verified |
 | File attachments | Storage, virus scanning, and CDN cost, none of which demonstrate anything the rest of the app does not |
 | Recurring cards / subtasks | Depth in one feature beats breadth across five |
 | Drag to reorder lists | The data model supports it; the UI does not yet. Shipping a half-built interaction would be worse than not offering it |
@@ -48,8 +48,10 @@ looking at it right now and what changed while you were away.
   are the actual requirement, and all three are solved here
 - **React 19 + Vite 7** — fast enough iteration that the drag interactions were
   worth building with a real feedback loop
-- **dnd-kit** — accessible keyboard dragging, which the previous popular choice
-  did not have
+- **dnd-kit** — keyboard dragging via `KeyboardSensor`, which the previous
+  popular choice did not have. The sensors are split by intent rather than
+  unified: mouse drags at a 6px threshold, touch only after a 200ms hold, so a
+  tap still opens a card and a swipe still pans the board
 - **Node's built-in test runner** — no test framework dependency, and per-file
   process isolation maps directly onto the per-file database isolation the suite
   needs
@@ -57,7 +59,9 @@ looking at it right now and what changed while you were away.
 ## Data model
 
 ```
-User     username (unique), passwordHash, avatar
+User     username (unique), passwordHash (absent for social-only accounts),
+         email, emailVerified, avatar
+OAuthAccount  provider + providerUserId (unique together), userId, email
 Board    title, description, ownerId, members[], lists[]
 Card     boardId, listId, title, description, labels[], dueDate,
          assigneeId, position, version
@@ -97,10 +101,18 @@ owner is an ambiguous state nobody wants to debug.
 ```
 56  node:test            unit + integration, one database per file
 30  smoke.js             live API over real sockets and HTTP
-13  browser-test.js      two Chrome contexts, real drags, real reloads
+16  browser-test.js      two Chrome contexts, real drags, real reloads
 ```
 
-All passing, plus ESLint clean on the frontend.
+All passing, plus ESLint clean on the frontend (0 errors; the 2 warnings are
+pre-existing Fast Refresh ones in the two context files).
+
+Touch is covered by a separate audit, `npm run android` (`scripts/android-audit.js`), which drives a real
+Pixel 7 and a 360px budget Android viewport and asserts the gestures that a
+desktop mouse cannot: that a swipe on a card pans the board, that a long press
+then drag moves a card between columns, that the drag does not also open the
+card, that a plain tap does, and that a column scrolls under a vertical swipe
+without navigating away.
 
 ## Where this goes next
 

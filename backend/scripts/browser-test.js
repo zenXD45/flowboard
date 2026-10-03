@@ -162,6 +162,26 @@ async function main() {
     const afterDrag = (await listTitlesOfCards(pageB))[0];
     check('a drag by A relocates the card on B', beforeDrag !== afterDrag, `${beforeDrag} -> ${afterDrag}`);
 
+    // A drag ends with the pointer released over the card, so the browser fires
+    // a click afterwards. Now that a single click opens a card, that stray click
+    // would fling the card sheet open on every completed drag.
+    check('a completed drag does not also open the card sheet', (await pageA.$('.sheet')) === null);
+
+    // Single click opens the card, which is what makes a card reachable by touch
+    // at all -- a double click cannot be produced on a touchscreen.
+    // The drag overlay unmounts a frame or two after the drag ends. Until it
+    // does it sits over the drop position and swallows clicks on the card
+    // underneath, so wait for the UI to settle before clicking.
+    await pageA.waitForFunction(() => document.querySelectorAll('.card--overlay').length === 0, {
+      timeout: 5000
+    });
+
+    await pageA.click('.column:nth-of-type(2) .card');
+    await pageA.waitForSelector('.sheet', { timeout: 8000 });
+    check('a single click opens the card sheet', true);
+    await pageA.click('.scrim');
+    await waitFor(async () => (await pageA.$('.sheet')) === null, { label: 'card sheet closing' });
+
     // The move survives a reload because the server, not the client, owns the truth.
     await pageB.reload({ waitUntil: 'domcontentloaded' });
     await pageB.waitForSelector('.column', { timeout: 15000 });
@@ -199,12 +219,12 @@ async function main() {
 
     // B has the card open, so a new comment on it is visible without a refresh.
     await pageB.evaluate(() => {
-      document.querySelector('.card').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      document.querySelector('.card').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await pageB.waitForSelector('.comment__composer textarea', { timeout: 8000 });
 
     await pageA.evaluate(() => {
-      document.querySelector('.card').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      document.querySelector('.card').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await pageA.waitForSelector('.comment__composer textarea', { timeout: 8000 });
     await pageA.type('.comment__composer textarea', 'Shipping this today');
@@ -218,11 +238,72 @@ async function main() {
     await pageA.reload({ waitUntil: 'domcontentloaded' });
     await pageA.waitForSelector('.column', { timeout: 15000 });
     await pageA.evaluate(() => {
-      document.querySelector('.card').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      document.querySelector('.card').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await pageA.waitForSelector('.comment__body', { timeout: 8000 });
     const restored = await pageA.$eval('.comment__body', (el) => el.textContent);
     check('the comment is still there after a reload', restored === 'Shipping this today', restored);
+
+    // The board's loading state is a skeleton shaped like the board, not a
+    // spinner. Slow the snapshot response down so the loading state can
+    // actually be observed, then confirm its columns are the same width as the
+    // real ones -- that is the whole point of the skeleton, since a spinner
+    // followed by a differently shaped layout makes the page jump under the
+    // user's thumb.
+    await pageA.setRequestInterception(true);
+    const holdSnapshot = (req) => {
+      if (req.url().includes('/snapshot')) {
+        setTimeout(() => req.continue().catch(() => {}), 2500);
+        return;
+      }
+      req.continue().catch(() => {});
+    };
+    pageA.on('request', holdSnapshot);
+    const reloading = pageA.reload({ waitUntil: 'domcontentloaded' });
+    await pageA.waitForSelector('.skel__col', { timeout: 10000 });
+    check('the board shows a skeleton while loading, not a bare spinner', true);
+    // Measure the skeleton now, while it is the thing on screen. The real
+    // columns do not exist yet -- comparing against them here would race the
+    // very transition this check exists to protect.
+    const skelWidth = await pageA.$eval('.skel__col', (el) => Math.round(el.getBoundingClientRect().width));
+    await reloading;
+    await pageA.waitForSelector('.column', { timeout: 15000 });
+    const realWidth = await pageA.$eval('.column', (el) => Math.round(el.getBoundingClientRect().width));
+    check(
+      'skeleton columns match the real column width so nothing jumps',
+      skelWidth === realWidth,
+      `skeleton ${skelWidth}px vs board ${realWidth}px`
+    );
+    pageA.off('request', holdSnapshot);
+    await pageA.setRequestInterception(false);
+
+    // Deleting a list cascades to every card inside it. It used to take one tap,
+    // which is fine when you can hover the button and read its title and
+    // reckless on a phone, where a mis-tap has no undo. The first tap now arms a
+    // confirmation that names what it destroys. Only the safety property is
+    // asserted here: one tap must not delete, and backing out must keep the list.
+    const listsBefore = (await pageA.$$('.column')).length;
+    await pageA.click('.column:nth-of-type(3) .column__head .iconbtn');
+    await pageA.waitForSelector('.column__confirm', { timeout: 5000 });
+    check(
+      'one tap on delete arms a confirmation instead of deleting',
+      (await pageA.$$('.column')).length === listsBefore,
+      `${listsBefore} -> ${(await pageA.$$('.column')).length} columns`
+    );
+    const armed = await pageA.$eval('.column__confirm', (el) => el.textContent);
+    check(
+      'the confirmation names the list and its cards',
+      /^delete list/i.test(armed.trim()),
+      armed.trim()
+    );
+
+    await pageA.click('.column__confirm .iconbtn');
+    await waitFor(async () => (await pageA.$('.column__confirm')) === null, { label: 'confirmation backing out' });
+    check(
+      'backing out of the confirmation keeps the list',
+      (await pageA.$$('.column')).length === listsBefore,
+      `${(await pageA.$$('.column')).length} columns`
+    );
 
     // B's presence disappears when B leaves.
     await pageB.close();
