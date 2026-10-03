@@ -10,7 +10,7 @@ const base = process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017/flowboard';
 // each file's beforeEach resetDatabase() would delete the other file's fixtures
 // mid-run — producing failures that pass in isolation. So every file gets its
 // own database, derived from its own filename.
-function withTestDatabase(url) {
+export function withTestDatabase(url) {
   const qIndex = url.indexOf('?');
   const query = qIndex === -1 ? '' : url.slice(qIndex);
   const withoutQuery = qIndex === -1 ? url : url.slice(0, qIndex);

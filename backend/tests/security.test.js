@@ -295,3 +295,133 @@ test('an unauthenticated socket cannot emit anything', async () => {
   assert.ok(error, 'connection without a token must be refused');
   socket.close();
 });
+
+/**
+ * Query-operator injection through a client-supplied id.
+ *
+ * `{ _id: payload.cardId }` is only safe while cardId is a plain string.
+ * Mongoose forwards an operator object like `{ $ne: null }` to Mongo instead
+ * of casting it, so the query stops meaning "this card" and starts meaning
+ * "any card" — which silently renamed one card and deleted another, taking
+ * their comments with them. These tests pin the central guard in handle().
+ */
+const INJECTIONS = [
+  { $ne: null },
+  { $gt: '' },
+  { $exists: true },
+  { $in: [null] },
+  { $regex: '.*' }
+];
+
+const ID_EVENTS = {
+  'board:update': ['boardId'],
+  'board:delete': ['boardId'],
+  'member:add': ['boardId'],
+  'member:role': ['boardId', 'userId'],
+  'member:remove': ['boardId', 'userId'],
+  'list:create': ['boardId'],
+  'list:rename': ['boardId', 'listId'],
+  'list:move': ['boardId', 'listId'],
+  'list:delete': ['boardId', 'listId'],
+  'card:create': ['boardId', 'listId'],
+  'card:move': ['boardId', 'cardId', 'toListId'],
+  'card:update': ['boardId', 'cardId'],
+  'card:delete': ['boardId', 'cardId'],
+  'comment:add': ['boardId', 'cardId']
+};
+
+/** Real ids for every id field, so a test can spoil exactly one of them. */
+async function fixture(user) {
+  const socket = await connect(user.token);
+  const board = (await emit(socket, 'board:create', { title: 'Injection Fixture' })).board;
+  const list = (await emit(socket, 'list:create', { boardId: board.id, title: 'L1' })).list;
+  const card = (await emit(socket, 'card:create', {
+    boardId: board.id,
+    listId: list.id,
+    title: 'Do not touch'
+  })).card;
+  socket.close();
+  return { boardId: board.id, listId: list.id, toListId: list.id, cardId: card.id, userId: user.id };
+}
+
+for (const [event, fields] of Object.entries(ID_EVENTS)) {
+  for (const field of fields) {
+    test(`${event} rejects an injected ${field}`, async () => {
+      const user = await makeUser('maya');
+      const base = await fixture(user);
+      const socket = await connect(user.token);
+      try {
+        for (const injection of INJECTIONS) {
+          const ack = await emit(socket, event, { ...base, [field]: injection });
+          assert.equal(
+            ack.status,
+            'error',
+            `${event} accepted { ${field}: ${JSON.stringify(injection)} } -> ${JSON.stringify(ack)}`
+          );
+          assert.equal(ack.code, 'bad_request');
+          assert.equal(ack.message, `Invalid ${field}`);
+        }
+      } finally {
+        socket.close();
+      }
+    });
+  }
+}
+
+test('a genuine id still works — the guard is not simply rejecting everything', async () => {
+  const user = await makeUser('maya');
+  const base = await fixture(user);
+  const socket = await connect(user.token);
+  try {
+    const ack = await emit(socket, 'board:update', { boardId: base.boardId, title: 'A valid rename' });
+    assert.equal(ack.status, 'ok');
+    assert.equal(ack.patch.title, 'A valid rename');
+  } finally {
+    socket.close();
+  }
+});
+
+test('a deleted card takes its comments with it, but only the targeted one', async () => {
+  const user = await makeUser('maya');
+  const base = await fixture(user);
+  const socket = await connect(user.token);
+  try {
+    const doomed = await emit(socket, 'card:create', {
+      boardId: base.boardId,
+      listId: base.listId,
+      title: 'Delete me'
+    });
+    const kept = await emit(socket, 'card:create', {
+      boardId: base.boardId,
+      listId: base.listId,
+      title: 'Keep me'
+    });
+    const ack = await emit(socket, 'card:delete', {
+      boardId: base.boardId,
+      cardId: doomed.card.id
+    });
+    assert.equal(ack.status, 'ok');
+
+    const { Card } = await import('../models/Card.js');
+    const titles = (await Card.find({ boardId: base.boardId }).lean()).map((c) => c.title);
+    assert.deepEqual(titles.sort(), ['Do not touch', 'Keep me']);
+    assert.ok(!titles.includes('Delete me'));
+    assert.ok(titles.includes(kept.card.title));
+  } finally {
+    socket.close();
+  }
+});
+
+test('isValidObjectId accepts only 24-character hex strings', async () => {
+  const { isValidObjectId } = await import('../utils/validate.js');
+  assert.equal(isValidObjectId('6ac0a706e40718913df03745'), true);
+  assert.equal(isValidObjectId('6AC0A706E40718913DF03745'), true, 'uppercase hex is still an id');
+  assert.equal(isValidObjectId('123456789012'), false, '12 digits are not an id here');
+  assert.equal(isValidObjectId('6ac0a706e40718913df0374'), false, '23 chars');
+  assert.equal(isValidObjectId('6ac0a706e40718913df037455'), false, '25 chars');
+  assert.equal(isValidObjectId('zzzzzzzzzzzzzzzzzzzzzzzz'), false);
+  assert.equal(isValidObjectId(null), false);
+  assert.equal(isValidObjectId(undefined), false);
+  assert.equal(isValidObjectId(123), false);
+  assert.equal(isValidObjectId({ toString: () => '6ac0a706e40718913df03745' }), false, 'no duck-typing');
+});

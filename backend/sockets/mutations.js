@@ -7,10 +7,43 @@ import { User } from '../models/User.js';
 import { recordActivity } from '../models/Activity.js';
 import { ROLES, roleFor } from '../utils/permissions.js';
 import { positionBetween, gapIsCollapsed, spacedPositions } from '../utils/position.js';
-import { cleanString, cleanLabels, cleanIndex, cleanVersion, cleanDate } from '../utils/validate.js';
+import {
+  cleanString,
+  cleanLabels,
+  cleanIndex,
+  cleanVersion,
+  cleanDate,
+  isValidObjectId
+} from '../utils/validate.js';
 import { loadAccess, shapeCard, shapeList, resolvePosition } from './access.js';
 
 const DEFAULT_LISTS = ['To Do', 'In Progress', 'Done'];
+
+/**
+ * Which payload fields must be ObjectIds, per event.
+ *
+ * Enforced centrally in `handle()` rather than inside each handler: fourteen
+ * handlers each validating their own ids is fourteen chances to forget one,
+ * and a single omission is a query-injection hole that silently deletes or
+ * overwrites the wrong record. Anything not listed here is passed through to
+ * the handler's own validation.
+ */
+const ID_FIELDS = {
+  'board:update': ['boardId'],
+  'board:delete': ['boardId'],
+  'member:add': ['boardId'],
+  'member:role': ['boardId', 'userId'],
+  'member:remove': ['boardId', 'userId'],
+  'list:create': ['boardId'],
+  'list:rename': ['boardId', 'listId'],
+  'list:move': ['boardId', 'listId'],
+  'list:delete': ['boardId', 'listId'],
+  'card:create': ['boardId', 'listId'],
+  'card:move': ['boardId', 'cardId', 'toListId'],
+  'card:update': ['boardId', 'cardId'],
+  'card:delete': ['boardId', 'cardId'],
+  'comment:add': ['boardId', 'cardId']
+};
 
 const room = (boardId) => `board:${boardId}`;
 
@@ -18,7 +51,13 @@ function handle(io, socket, event, fn) {
   socket.on(event, async (payload, ack) => {
     const respond = typeof ack === 'function' ? ack : () => {};
     try {
-      await fn(payload || {}, respond, socket);
+      const data = payload || {};
+      for (const field of ID_FIELDS[event] || []) {
+        if (!isValidObjectId(data[field])) {
+          return respond({ status: 'error', code: 'bad_request', message: `Invalid ${field}` });
+        }
+      }
+      await fn(data, respond, socket);
     } catch (err) {
       if (!config.isTest) console.error(`[ws] ${event} failed:`, err);
       respond({ status: 'error', code: 'server_error', message: 'Something went wrong' });

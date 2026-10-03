@@ -1,3 +1,21 @@
+const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
+
+/**
+ * A client-supplied id must be a plain 24-character hex string.
+ *
+ * This is a security boundary, not a type check. Mongoose passes a query
+ * operator object such as `{ $ne: null }` straight through to Mongo instead
+ * of casting it, so `{ _id: payload.cardId }` becomes a query matching an
+ * arbitrary document rather than one specific record. Requiring a string
+ * rejects every operator form at the edge.
+ *
+ * Deliberately stricter than `mongoose.isValidObjectId`, which also accepts
+ * any 12-character string by treating it as a numeric ObjectId.
+ */
+export function isValidObjectId(value) {
+  return typeof value === 'string' && OBJECT_ID_RE.test(value);
+}
+
 export function cleanString(value, max, { required = false, fallback = '' } = {}) {
   if (value === undefined || value === null) {
     return required ? { error: 'This field is required' } : { value: fallback };

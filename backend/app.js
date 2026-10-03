@@ -17,6 +17,18 @@ export function createApp(overrides = {}) {
   const app = express();
   app.disable('x-powered-by');
 
+  // Render terminates TLS and forwards the real visitor address in
+  // X-Forwarded-For. Without trusting exactly one proxy hop, req.ip is Render's
+  // own private address — identical for every request from every visitor — so
+  // both rate limiters collapse into one site-wide bucket. That locks out
+  // every user after 20 signups in 15 minutes, and lets a single client deny
+  // service to everyone else just by retrying.
+  //
+  // 1, not true: Express then reads the *last* X-Forwarded-For entry, which is
+  // the one Render appends, so a client cannot spoof its way to a fresh bucket
+  // by sending its own X-Forwarded-For header.
+  app.set('trust proxy', 1);
+
   const cspDirectives = {
     defaultSrc: ["'self'"],
     scriptSrc: ["'self'"],
