@@ -1,0 +1,64 @@
+# FlowBoard — local production-shaped stack.
+#   docker compose up --build        →  http://localhost:8080
+# The site, API, OAuth, and Socket.io all answer from :8080 (single origin).
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5002"
+      MONGODB_URL: mongodb://mongo:27017/flowboard
+      REDIS_URL: redis://redis:6379
+      # Local-only default. Real deployments must supply their own.
+      JWT_SECRET: ${JWT_SECRET:-compose-dev-secret-override-me}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      # No Render free-tier sleep to fight here.
+      SELF_PING: "off"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports:
+      # Published only for the smoke/browser test scripts; browser traffic
+      # should go through the frontend on :8080.
+      - "5002:5002"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

@@ -1,0 +1,21 @@
+# One catch-all host routing everything to the frontend, which proxies the
+# API itself. For a real domain, set `host:` and point DNS at the ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flowboard
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/part-of: flowboard
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080

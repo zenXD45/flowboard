@@ -1,0 +1,83 @@
+# API — two replicas so the Socket.io Redis adapter actually matters: without
+# it, a client on replica A never sees a broadcast from replica B.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: flowboard
+spec:
+  selector:
+    app.kubernetes.io/name: backend
+  ports:
+    - name: http
+      port: 5002
+      targetPort: 5002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: flowboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never drop below serving capacity mid-rollout
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: flowboard
+    spec:
+      securityContext:
+        runAsNonRoot: true   # the image already runs as `node`
+      containers:
+        - name: backend
+          image: flowboard-backend:latest
+          imagePullPolicy: IfNotPresent   # loaded with `kind load`, not pulled
+          ports:
+            - name: http
+              containerPort: 5002
+          envFrom:
+            - configMapRef:
+                name: flowboard-config
+            - secretRef:
+                name: flowboard-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # The app refuses to listen until Mongo connects, so a too-eager
+          # probe would kill a backend that is still waiting for the database.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

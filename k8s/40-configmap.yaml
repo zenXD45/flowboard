@@ -1,0 +1,19 @@
+# Non-secret configuration. FRONTEND_URL / PUBLIC_URL are the origin people
+# reach the app on — change them when the ingress has a real host.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowboard-config
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/part-of: flowboard
+data:
+  NODE_ENV: "production"
+  PORT: "5002"
+  MONGODB_URL: "mongodb://mongo:27017/flowboard"
+  REDIS_URL: "redis://redis:6379"
+  # kubectl port-forward svc/frontend 8080:80 → http://localhost:8080
+  FRONTEND_URL: "http://localhost:8080"
+  PUBLIC_URL: "http://localhost:8080"
+  # No sleeping instance to keep warm inside a cluster.
+  SELF_PING: "off"

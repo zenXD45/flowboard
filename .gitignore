@@ -5,3 +5,4 @@ dist/
 *.log
 data/
 .DS_Store
+k8s/41-secret.yaml

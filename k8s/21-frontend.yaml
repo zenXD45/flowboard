@@ -1,0 +1,66 @@
+# Frontend — nginx serving the bundle and proxying /api, /auth, /health, and
+# /socket.io to the backend, so Ingress has exactly one upstream.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: flowboard
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: flowboard
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: flowboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/part-of: flowboard
+    spec:
+      containers:
+        - name: frontend
+          image: flowboard-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /index.html
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
