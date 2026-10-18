@@ -40,6 +40,7 @@ export function BoardProvider({ boardId, children }) {
   const [fatal, setFatal] = useState('');
   const [toasts, setToasts] = useState(EMPTY_TOASTS);
   const [connection, setConnection] = useState({ connected: false, error: '' });
+  const [cardEditors, setCardEditors] = useState({});
 
   // The socket event handlers below are registered once but need current data.
   // Reading through refs keeps the listeners stable without re-subscribing
@@ -128,6 +129,23 @@ export function BoardProvider({ boardId, children }) {
           const next = { ...prev };
           delete next[cardId];
           return next;
+        }),
+      'card:focused': ({ cardId, userId, username }) =>
+        setCardEditors((prev) => {
+          const list = prev[cardId] || [];
+          if (list.some((u) => u.userId === userId)) return prev;
+          return { ...prev, [cardId]: [...list, { userId, username }] };
+        }),
+      'card:blurred': ({ cardId, userId }) =>
+        setCardEditors((prev) => {
+          const list = prev[cardId] || [];
+          const nextList = list.filter((u) => u.userId !== userId);
+          if (nextList.length === 0) {
+            const next = { ...prev };
+            delete next[cardId];
+            return next;
+          }
+          return { ...prev, [cardId]: nextList };
         }),
       'list:created': ({ list }) =>
         setBoard((prev) => (prev ? { ...prev, lists: sortByPosition([...prev.lists, list]) } : prev)),
@@ -437,6 +455,83 @@ export function BoardProvider({ boardId, children }) {
     return (listId) => grouped.get(listId) || [];
   }, [cards]);
 
+  const focusCard = useCallback(
+    (cardId) => {
+      const socket = getSocket();
+      if (socket?.connected && boardId && cardId) {
+        socket.emit('card:focus', { boardId, cardId });
+      }
+    },
+    [boardId]
+  );
+
+  const blurCard = useCallback(
+    (cardId) => {
+      const socket = getSocket();
+      if (socket?.connected && boardId && cardId) {
+        socket.emit('card:blur', { boardId, cardId });
+      }
+    },
+    [boardId]
+  );
+
+  const exportBoard = useCallback(() => {
+    if (!board) return;
+    const listsWithCards = (board.lists || []).map((l) => {
+      const listCards = cardsByList(l.id).map((c) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description || '',
+        labels: c.labels || [],
+        dueDate: c.dueDate || null,
+        assignee: c.assigneeId ? people[c.assigneeId]?.username || c.assigneeId : null,
+        version: c.version,
+        comments: (comments[c.id] || []).map((cm) => ({
+          author: people[cm.authorId]?.username || cm.authorName || 'Someone',
+          body: cm.body,
+          createdAt: cm.createdAt
+        })),
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt
+      }));
+      return {
+        id: l.id,
+        title: l.title,
+        position: l.position,
+        cards: listCards
+      };
+    });
+
+    const payload = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      board: {
+        id: board.id,
+        title: board.title,
+        description: board.description || '',
+        owner: people[board.ownerId]?.username || board.ownerId,
+        members: (board.members || []).map((m) => ({
+          username: people[m.userId]?.username || m.userId,
+          role: m.role
+        })),
+        createdAt: board.createdAt
+      },
+      lists: listsWithCards
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTitle = (board.title || 'board').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    a.href = url;
+    a.download = `flowboard-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Board exported to JSON');
+  }, [board, cardsByList, people, comments, toast]);
+
   const value = useMemo(
     () => ({
       board,
@@ -450,6 +545,10 @@ export function BoardProvider({ boardId, children }) {
       commentsFor: (cardId) => comments[cardId] || EMPTY_COMMENTS,
       people,
       presence,
+      cardEditors,
+      focusCard,
+      blurCard,
+      exportBoard,
       activity,
       loadMoreActivity,
       hasMoreActivity: !activityDone,
@@ -482,6 +581,10 @@ export function BoardProvider({ boardId, children }) {
       comments,
       people,
       presence,
+      cardEditors,
+      focusCard,
+      blurCard,
+      exportBoard,
       activity,
       loadMoreActivity,
       activityDone,

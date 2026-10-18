@@ -102,12 +102,57 @@ export default function initSockets(io) {
     socket.on('board:leave', async (payload) => {
       const boardId = String(payload?.boardId || '');
       if (!boardId) return;
+      if (socket.data.activeCardId && socket.data.activeBoardId === boardId) {
+        io.to(room(boardId)).emit('card:blurred', {
+          boardId,
+          cardId: socket.data.activeCardId,
+          userId: socket.data.userId
+        });
+        socket.data.activeCardId = null;
+        socket.data.activeBoardId = null;
+      }
       socket.leave(room(boardId));
       socket.data.boards.delete(boardId);
       await broadcastPresence(io, boardId);
     });
 
+    socket.on('card:focus', (payload) => {
+      const boardId = String(payload?.boardId || '');
+      const cardId = String(payload?.cardId || '');
+      if (!boardId || !cardId || !socket.data.boards.has(boardId)) return;
+      socket.data.activeCardId = cardId;
+      socket.data.activeBoardId = boardId;
+      io.to(room(boardId)).emit('card:focused', {
+        boardId,
+        cardId,
+        userId: socket.data.userId,
+        username: socket.data.username || 'Someone'
+      });
+    });
+
+    socket.on('card:blur', (payload) => {
+      const boardId = String(payload?.boardId || socket.data.activeBoardId || '');
+      const cardId = String(payload?.cardId || socket.data.activeCardId || '');
+      if (!boardId || !cardId) return;
+      socket.data.activeCardId = null;
+      socket.data.activeBoardId = null;
+      io.to(room(boardId)).emit('card:blurred', {
+        boardId,
+        cardId,
+        userId: socket.data.userId
+      });
+    });
+
     socket.on('disconnect', async () => {
+      if (socket.data.activeCardId && socket.data.activeBoardId) {
+        io.to(room(socket.data.activeBoardId)).emit('card:blurred', {
+          boardId: socket.data.activeBoardId,
+          cardId: socket.data.activeCardId,
+          userId: socket.data.userId
+        });
+        socket.data.activeCardId = null;
+        socket.data.activeBoardId = null;
+      }
       for (const boardId of socket.data.boards || []) {
         await broadcastPresence(io, boardId);
       }

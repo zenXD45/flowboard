@@ -35,24 +35,51 @@ function when(iso) {
   return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
+function parseChecklist(text) {
+  const items = [];
+  const lines = (text || '').split('\n');
+  lines.forEach((line, lineIndex) => {
+    const match = line.match(/^(\s*-\s*\[)([ xX])(\]\s*)(.*)$/);
+    if (match) {
+      items.push({
+        lineIndex,
+        done: match[2].toLowerCase() === 'x',
+        text: match[4]
+      });
+    }
+  });
+  return items;
+}
+
 function CardDetail({ cardId, onClose, selfId }) {
-  const { cards, board, boardId, people, canEdit, commentsFor, updateCard, deleteCard, toast } = useBoard();
+  const { cards, board, boardId, people, canEdit, commentsFor, updateCard, deleteCard, toast, focusCard, blurCard } = useBoard();
   const card = cards.find((c) => c.id === cardId);
 
   const [title, setTitle] = useState(card?.title || '');
   const [description, setDescription] = useState(card?.description || '');
   const [draft, setDraft] = useState('');
+  const [newTaskText, setNewTaskText] = useState('');
   const dialogRef = useDialog(onClose);
 
   useEffect(() => {
     setTitle(card?.title || '');
     setDescription(card?.description || '');
-  }, [cardId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [card?.title, card?.description]);
+
+  useEffect(() => {
+    if (cardId) focusCard(cardId);
+    return () => {
+      if (cardId) blurCard(cardId);
+    };
+  }, [cardId, focusCard, blurCard]);
 
   if (!card || !board) return null;
 
   const comments = commentsFor(cardId);
   const assignee = card.assigneeId ? people[card.assigneeId] : null;
+  const checklistItems = parseChecklist(description);
+  const doneCount = checklistItems.filter((i) => i.done).length;
+  const totalTasks = checklistItems.length;
 
   const save = async () => {
     const patch = {};
@@ -61,6 +88,28 @@ function CardDetail({ cardId, onClose, selfId }) {
     if (description !== card.description) patch.description = description;
     if (Object.keys(patch).length === 0) return;
     await updateCard(card.id, patch);
+  };
+
+  const handleToggleTask = async (lineIndex) => {
+    if (!canEdit) return;
+    const lines = (description || '').split('\n');
+    if (lines[lineIndex] != null) {
+      lines[lineIndex] = lines[lineIndex].replace(/^(\s*-\s*\[)([ xX])(\])/, (_, pre, char, post) => {
+        return `${pre}${char.toLowerCase() === 'x' ? ' ' : 'x'}${post}`;
+      });
+      const newDesc = lines.join('\n');
+      setDescription(newDesc);
+      await updateCard(card.id, { description: newDesc });
+    }
+  };
+
+  const handleAddTask = async () => {
+    const trimmed = newTaskText.trim();
+    if (!trimmed || !canEdit) return;
+    setNewTaskText('');
+    const newDesc = description ? `${description.trimEnd()}\n- [ ] ${trimmed}` : `- [ ] ${trimmed}`;
+    setDescription(newDesc);
+    await updateCard(card.id, { description: newDesc });
   };
 
   const sendComment = async () => {
@@ -98,16 +147,80 @@ function CardDetail({ cardId, onClose, selfId }) {
       </header>
 
       <div className="sheet__body">
-        <textarea
-          className="sheet__desc"
-          rows={6}
-          value={description}
-          disabled={!canEdit}
-          placeholder="Add more detail…"
-          maxLength={4000}
-          onChange={(e) => setDescription(e.target.value)}
-          onBlur={save}
-        />
+        {(totalTasks > 0 || canEdit) && (
+          <div className="checklist-block">
+            <div className="checklist-block__head">
+              <span className="checklist-block__title">
+                <Icon name="check" size={13} /> Subtasks {totalTasks > 0 && `(${doneCount}/${totalTasks})`}
+              </span>
+              {totalTasks > 0 && (
+                <span className="checklist-block__pct">
+                  {Math.round((doneCount / totalTasks) * 100)}%
+                </span>
+              )}
+            </div>
+
+            {totalTasks > 0 && (
+              <div className="checklist-block__bar">
+                <div
+                  className="checklist-block__fill"
+                  style={{ width: `${(doneCount / totalTasks) * 100}%` }}
+                />
+              </div>
+            )}
+
+            {totalTasks > 0 && (
+              <div className="checklist">
+                {checklistItems.map((item) => (
+                  <label
+                    key={item.lineIndex}
+                    className={`checklist__item ${item.done ? 'checklist__item--done' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="checklist__checkbox"
+                      checked={item.done}
+                      disabled={!canEdit}
+                      onChange={() => handleToggleTask(item.lineIndex)}
+                    />
+                    <span className="checklist__text">{item.text || '(empty task)'}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {canEdit && (
+              <div className="checklist__add">
+                <input
+                  className="checklist__input"
+                  placeholder="Add subtask (press Enter) …"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTask();
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="sheet__desc-wrap">
+          <span className="sheet__label">Notes & Details</span>
+          <textarea
+            className="sheet__desc"
+            rows={5}
+            value={description}
+            disabled={!canEdit}
+            placeholder="Add more detail, context, or markdown…"
+            maxLength={4000}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={save}
+          />
+        </div>
 
         <dl className="meta">
           <dt>Assignee</dt>

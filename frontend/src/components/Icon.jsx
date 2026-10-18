@@ -18,7 +18,8 @@ const PATHS = {
   link: 'M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71',
   search: 'M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15zM21 21l-5.2-5.2',
   grip: 'M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01',
-  filter: 'M3 4h18l-7 8v6l-4 2v-8L3 4z'
+  filter: 'M3 4h18l-7 8v6l-4 2v-8L3 4z',
+  download: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'
 };
 
 export default function Icon({ name, size = 16, className = '' }) {

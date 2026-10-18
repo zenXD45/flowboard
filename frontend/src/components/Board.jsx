@@ -60,7 +60,8 @@ export default function Board({ selfId }) {
     createList,
     renameList,
     deleteList,
-    moveList
+    moveList,
+    exportBoard
   } = useBoard();
 
   const [dragging, setDragging] = useState(null);
@@ -211,6 +212,15 @@ export default function Board({ selfId }) {
           </button>
           <button type="button" className="ghostbtn" data-testid="open-people" onClick={() => setPanel({ kind: 'people' })}>
             <Icon name="users" size={14} /> People
+          </button>
+          <button
+            type="button"
+            className="ghostbtn"
+            data-testid="export-board"
+            onClick={exportBoard}
+            title="Export board as JSON"
+          >
+            <Icon name="download" size={14} /> Export
           </button>
           <AvatarMenu />
         </div>

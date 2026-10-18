@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
+import { useBoard } from '../context/BoardContext.jsx';
 
 /* Labels are free-form, so a known name picks a hue token and anything else
    falls back to a neutral chip. The token pair carries both themes, which is
@@ -40,10 +41,12 @@ export default function CardTile({ card, people, onOpen, disabled, index = 0 }) 
     disabled
   });
 
+  const { cardEditors } = useBoard();
   const assignee = card.assigneeId ? people[card.assigneeId] : null;
   const tone = dueTone(card.dueDate);
   const taskCount = (card.description?.match(/- \[[ xX]\]/g) || []).length;
   const taskDone = (card.description?.match(/- \[[xX]\]/g) || []).length;
+  const editors = cardEditors?.[card.id] || [];
 
   /**
    * Opened on click, not double-click.
@@ -62,7 +65,7 @@ export default function CardTile({ card, people, onOpen, disabled, index = 0 }) 
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, '--i': index }}
-      className={`card ${isDragging ? 'card--dragging' : ''} ${card._pending ? 'card--pending' : ''}`}
+      className={`card ${isDragging ? 'card--dragging' : ''} ${card._pending ? 'card--pending' : ''} ${editors.length > 0 ? 'card--active-editing' : ''}`}
       {...attributes}
       {...listeners}
       onClick={() => onOpen(card)}
@@ -91,31 +94,48 @@ export default function CardTile({ card, people, onOpen, disabled, index = 0 }) 
       {card.description && <p className="card__excerpt">{card.description.slice(0, 90)}</p>}
 
       <div className="card__foot">
-        {taskCount > 0 && (
-          <span
-            className={`card__tasks ${taskDone === taskCount ? 'card__tasks--done' : ''}`}
-            title={`${taskDone} of ${taskCount} tasks completed`}
-          >
-            <Icon name="check" size={11} />
-            {taskDone}/{taskCount}
-          </span>
-        )}
-        {card.dueDate && (
-          <span className={`due ${tone ? `due--${tone}` : ''}`}>
-            <Icon name="clock" size={12} />
-            {new Date(card.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-          </span>
-        )}
-        {assignee && (
-          <Avatar
-            userId={card.assigneeId}
-            username={assignee.username}
-            displayName={assignee.displayName}
-            avatar={assignee.avatar}
-            avatarColor={assignee.avatarColor}
-            size={22}
-          />
-        )}
+        <div className="card__foot-left">
+          {taskCount > 0 && (
+            <span
+              className={`card__tasks ${taskDone === taskCount ? 'card__tasks--done' : ''}`}
+              title={`${taskDone} of ${taskCount} tasks completed`}
+            >
+              <Icon name="check" size={11} />
+              {taskDone}/{taskCount}
+            </span>
+          )}
+          {card.dueDate && (
+            <span className={`due ${tone ? `due--${tone}` : ''}`}>
+              <Icon name="clock" size={12} />
+              {new Date(card.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </div>
+        <div className="card__foot-right">
+          {editors.length > 0 && (
+            <div className="card__active-editors" title={`Currently viewing/editing: ${editors.map((e) => e.username).join(', ')}`}>
+              <span className="card__active-pulse" />
+              {editors.slice(0, 2).map((e) => (
+                <Avatar
+                  key={e.userId}
+                  userId={e.userId}
+                  username={e.username}
+                  size={19}
+                />
+              ))}
+            </div>
+          )}
+          {assignee && (
+            <Avatar
+              userId={card.assigneeId}
+              username={assignee.username}
+              displayName={assignee.displayName}
+              avatar={assignee.avatar}
+              avatarColor={assignee.avatarColor}
+              size={22}
+            />
+          )}
+        </div>
       </div>
     </article>
   );
