@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import CardTile from './CardTile.jsx';
 import Icon from './Icon.jsx';
 
@@ -11,6 +12,19 @@ export default function Column({ list, cards, people, canEdit, index = 0, onOpen
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [title, setTitle] = useState(list.title);
   const inputRef = useRef(null);
+
+  const {
+    attributes: colAttributes,
+    listeners: colListeners,
+    setNodeRef: setColRef,
+    transform: colTransform,
+    transition: colTransition,
+    isDragging: isColDragging
+  } = useSortable({
+    id: list.id,
+    data: { type: 'column', list },
+    disabled: !canEdit
+  });
 
   const { setNodeRef, isOver } = useDroppable({
     id: `list:${list.id}`,
@@ -45,8 +59,29 @@ export default function Column({ list, cards, people, canEdit, index = 0, onOpen
   };
 
   return (
-    <section className="column" aria-label={list.title} style={{ '--col': index }}>
+    <section
+      ref={setColRef}
+      className={`column ${isColDragging ? 'column--dragging' : ''}`}
+      aria-label={list.title}
+      style={{
+        transform: CSS.Translate.toString(colTransform),
+        transition: colTransition,
+        '--col': index
+      }}
+    >
       <header className="column__head">
+        {canEdit && (
+          <button
+            type="button"
+            className="iconbtn column__drag-handle"
+            aria-label={`Drag to reorder list ${list.title}`}
+            title="Drag to reorder list"
+            {...colAttributes}
+            {...colListeners}
+          >
+            <Icon name="grip" size={13} />
+          </button>
+        )}
         {renaming ? (
           <input
             ref={inputRef}

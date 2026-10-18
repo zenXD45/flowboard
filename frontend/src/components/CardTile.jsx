@@ -42,6 +42,8 @@ export default function CardTile({ card, people, onOpen, disabled, index = 0 }) 
 
   const assignee = card.assigneeId ? people[card.assigneeId] : null;
   const tone = dueTone(card.dueDate);
+  const taskCount = (card.description?.match(/- \[[ xX]\]/g) || []).length;
+  const taskDone = (card.description?.match(/- \[[xX]\]/g) || []).length;
 
   /**
    * Opened on click, not double-click.
@@ -89,6 +91,15 @@ export default function CardTile({ card, people, onOpen, disabled, index = 0 }) 
       {card.description && <p className="card__excerpt">{card.description.slice(0, 90)}</p>}
 
       <div className="card__foot">
+        {taskCount > 0 && (
+          <span
+            className={`card__tasks ${taskDone === taskCount ? 'card__tasks--done' : ''}`}
+            title={`${taskDone} of ${taskCount} tasks completed`}
+          >
+            <Icon name="check" size={11} />
+            {taskDone}/{taskCount}
+          </span>
+        )}
         {card.dueDate && (
           <span className={`due ${tone ? `due--${tone}` : ''}`}>
             <Icon name="clock" size={12} />

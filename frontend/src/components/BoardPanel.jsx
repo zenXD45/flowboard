@@ -146,8 +146,14 @@ function CardDetail({ cardId, onClose, selfId }) {
           <dd className="meta__labels">
             {(card.labels || []).length === 0 && !canEdit ? <span className="muted">none</span> : null}
             {(card.labels || []).map((name) => (
-              <span key={name} className="label">
+              <span
+                key={name}
+                className={`label ${canEdit ? 'label--removable' : ''}`}
+                onClick={() => canEdit && updateCard(card.id, { labels: card.labels.filter((l) => l !== name) })}
+                title={canEdit ? `Click to remove label “${name}”` : undefined}
+              >
                 {name}
+                {canEdit && <Icon name="close" size={10} className="label__remove" />}
               </span>
             ))}
             {canEdit && (

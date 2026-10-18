@@ -783,6 +783,130 @@ label input, label textarea { margin-top: 5px; }
 }
 .topbar__right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
+/* ---------------------------------------------------------------- filterbar */
+
+.filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-1);
+}
+
+.filterbar__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  max-width: 320px;
+  flex: 1;
+}
+
+.filterbar__search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.filterbar__input {
+  width: 100%;
+  padding: 5px 28px 5px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-xs);
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.filterbar__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-wash);
+}
+
+.filterbar__clear-search {
+  position: absolute;
+  right: 6px;
+  padding: 2px;
+  color: var(--ink-3);
+}
+.filterbar__clear-search:hover { color: var(--ink); }
+
+.filterbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.filterbar__group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filterbar__label {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  margin-right: 2px;
+}
+
+.filterchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--font);
+  font-size: var(--t-xs);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.filterchip:hover {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.filterchip--active {
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.filterbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterbar__count {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.filterbar__reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+}
+.filterbar__reset:hover { color: var(--danger); }
+
 .presence { display: flex; align-items: center; padding-left: 4px; }
 .presence__dot {
   width: 7px;
@@ -871,6 +995,36 @@ label input, label textarea { margin-top: 5px; }
      5px inside this padding. Text aligns to text, not to edges. */
   padding: 8px 8px 8px 16px;
   border-bottom: 1px solid var(--line-soft);
+}
+.column__drag-handle {
+  cursor: grab;
+  color: var(--ink-3);
+  padding: 2px;
+  border-radius: var(--r-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.column__drag-handle:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.column__drag-handle:active {
+  cursor: grabbing;
+}
+.column--dragging {
+  opacity: 0.35;
+}
+.column--overlay {
+  border-radius: var(--r-3);
+  background: var(--surface-1);
+  border: 1px solid var(--accent-line);
+  box-shadow: var(--shadow-3);
+  padding: 10px 14px;
+  min-height: 100px;
+  pointer-events: none;
 }
 .column__title {
   flex: 1;
@@ -1080,6 +1234,23 @@ label input, label textarea { margin-top: 5px; }
   font-weight: 600;
   letter-spacing: 0.03em;
 }
+.label--removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.label--removable:hover {
+  opacity: 0.82;
+  transform: scale(0.97);
+}
+.label__remove {
+  opacity: 0.7;
+}
+.label--removable:hover .label__remove {
+  opacity: 1;
+}
 
 .card__title { font-size: var(--t-md); line-height: 1.38; overflow-wrap: anywhere; }
 .card__excerpt {
@@ -1100,6 +1271,23 @@ label input, label textarea { margin-top: 5px; }
   margin-top: 9px;
 }
 .card__foot:empty { display: none; }
+
+.card__tasks {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: var(--t-2xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.card__tasks--done {
+  background: var(--accent-wash);
+  color: var(--accent-text);
+}
 
 .due {
   display: inline-flex;

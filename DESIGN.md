@@ -378,9 +378,6 @@ recorded it — the only symptom was a textarea that silently refilled itself.
 this app stops at halfway: it renders optimistically but has no queue, so a move
 made on a dead connection is lost rather than deferred.
 
-**No reordering of lists by drag.** Cards drag; lists are renamed and deleted but
-not dragged. The embedded-list design makes it possible; it just is not built.
-
 **Activity log grows forever.** It is paginated on read but never trimmed. A real
 deployment would want a TTL or a retention window.
 

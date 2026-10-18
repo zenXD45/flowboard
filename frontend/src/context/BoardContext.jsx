@@ -340,6 +340,37 @@ export function BoardProvider({ boardId, children }) {
     [boardId, toast]
   );
 
+  const moveList = useCallback(
+    async (listId, index) => {
+      const before = board?.lists;
+      if (!before) return;
+      const others = before.filter((l) => l.id !== listId);
+      const target = before.find((l) => l.id === listId);
+      if (!target) return;
+      const clamped = Math.min(Math.max(index, 0), others.length);
+      const nextLists = [...others];
+      nextLists.splice(clamped, 0, target);
+      setBoard((prev) => (prev ? { ...prev, lists: nextLists } : prev));
+      try {
+        const ack = await mutate('list:move', { boardId, listId, index: clamped });
+        if (ack?.position != null) {
+          setBoard((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  lists: sortByPosition(prev.lists.map((l) => (l.id === listId ? { ...l, position: ack.position } : l)))
+                }
+              : prev
+          );
+        }
+      } catch (err) {
+        setBoard((prev) => (prev ? { ...prev, lists: before } : prev));
+        toast(err.message, 'error');
+      }
+    },
+    [boardId, board, toast]
+  );
+
   const updateBoardMeta = useCallback(
     async (patch) => {
       const before = board;
@@ -435,6 +466,7 @@ export function BoardProvider({ boardId, children }) {
       createList,
       renameList,
       deleteList,
+      moveList,
       updateBoardMeta,
       addMember,
       setMemberRole,
@@ -466,6 +498,7 @@ export function BoardProvider({ boardId, children }) {
       createList,
       renameList,
       deleteList,
+      moveList,
       updateBoardMeta,
       addMember,
       setMemberRole,
